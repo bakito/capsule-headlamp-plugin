@@ -20,6 +20,7 @@ import { ManagedResources } from '../common/ManagedResources';
 import { REPLICATION_RESOURCE_REFRESH_EVENT } from '../common/replicationCordon';
 import { ReplicationDependenciesSection } from '../common/ReplicationDependencies';
 import { AnchoredSubheading } from '../common/SectionAnchor';
+import { ImpersonationSubjectCell } from '../subjects/ImpersonationSubjectCell';
 
 export interface GlobalTenantResourceDetailProps {
   name?: string;
@@ -91,6 +92,10 @@ export function GlobalTenantResourceDetail(props: GlobalTenantResourceDetailProp
                   {item.spec?.resyncPeriod || item.jsonData?.spec?.resyncPeriod || '—'}
                 </Typography>
               ),
+            },
+            {
+              name: 'Impersonation ServiceAccount',
+              value: <ImpersonationSubjectCell reference={item.spec?.serviceAccount} />,
             },
           ];
         }}

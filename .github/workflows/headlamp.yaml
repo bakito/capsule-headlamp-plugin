@@ -37,7 +37,7 @@ jobs:
         run: npx @kinvolk/headlamp-plugin test . || npm test --if-present
 
       - name: Build
-        run: npx @kinvolk/headlamp-plugin build . || npm run build
+        run: npm run build
 
   release:
     name: Release to GitHub + Docker + Artifact Hub

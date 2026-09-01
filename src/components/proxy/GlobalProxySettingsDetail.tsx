@@ -8,6 +8,8 @@ import { AnchoredSectionBox as SectionBox } from '../common/AnchoredSectionBox';
 import { ConditionsAndEvents } from '../common/ConditionsAndEvents';
 import { ConditionStatusChip } from '../common/ConditionStatusChip';
 import { DetailsSectionStack } from '../common/DetailsSectionStack';
+import { CapsuleSubjectLink } from '../subjects/CapsuleSubjectLink';
+import { normalizeCapsuleSubject } from '../subjects/subjectReferences';
 import {
   globalProxyClusterResourceCount,
   globalProxyReadyCondition,
@@ -102,12 +104,10 @@ export function GlobalProxySettingsDetail(props: GlobalProxySettingsDetailProps)
                 getter: (row: GlobalProxyRuleRow) => (
                   <Stack direction="row" flexWrap="wrap" gap={0.5}>
                     {row.subjects.map(subject => (
-                      <Chip
+                      <CapsuleSubjectLink
                         key={`${subject.kind}/${subject.name}`}
-                        size="small"
-                        color="primary"
-                        label={`${subject.kind}: ${subject.name}`}
-                        variant="outlined"
+                        display="chip"
+                        subject={normalizeCapsuleSubject(subject)}
                       />
                     ))}
                   </Stack>

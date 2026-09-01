@@ -1,13 +1,6 @@
-import { ConfigStore } from '@kinvolk/headlamp-plugin/lib';
 import { ActionButton } from '@kinvolk/headlamp-plugin/lib/components/common';
 import { documentationUrlForResource } from './capsuleDocumentation';
-
-export interface CapsulePluginConfig {
-  documentationBaseUrl?: string;
-}
-
-export const capsulePluginConfig = new ConfigStore<CapsulePluginConfig>('capsule');
-const useCapsulePluginConfig = capsulePluginConfig.useConfig();
+import { useCapsulePluginConfig } from './capsulePluginConfig';
 
 export function CapsuleDocumentationAction(props: any) {
   const resource = props.item || props.resource;

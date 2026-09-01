@@ -1,4 +1,12 @@
 import { useParams } from 'react-router-dom';
+import { BreakRequestDetail } from '../break-the-glass/BreakRequestDetail';
+import { BreakRequestsList } from '../break-the-glass/BreakRequestList';
+import { BreakRequestTemplatesList } from '../break-the-glass/BreakRequestTemplateList';
+import {
+  BreakRequestTemplateDetail,
+  GlobalBreakRequestTemplateDetail,
+} from '../break-the-glass/GlobalBreakRequestTemplateDetail';
+import { GlobalBreakRequestTemplatesList } from '../break-the-glass/GlobalBreakRequestTemplateList';
 import { CapsuleConfigurationDetail } from '../configuration/CapsuleConfigurationDetail';
 import { CapsuleConfigurationList } from '../configuration/CapsuleConfigurationList';
 import { GlobalProxySettingsDetail } from '../proxy/GlobalProxySettingsDetail';
@@ -21,10 +29,13 @@ import { TenantDetail } from '../tenants/TenantDetail';
 import { TenantsList } from '../tenants/TenantList';
 
 export type CapsuleCustomResourceDetailKind =
+  | 'BreakRequest'
+  | 'BreakRequestTemplate'
   | 'CapsuleConfiguration'
   | 'CustomQuota'
   | 'GlobalCustomQuota'
   | 'GlobalProxySettings'
+  | 'GlobalBreakRequestTemplate'
   | 'GlobalResourceQuota'
   | 'GlobalTenantResource'
   | 'ResourcePool'
@@ -38,6 +49,10 @@ export function CapsuleCustomResourceDetail({ kind }: { kind: CapsuleCustomResou
   const objectNamespace = namespace === '-' ? undefined : namespace;
 
   switch (kind) {
+    case 'BreakRequest':
+      return <BreakRequestDetail name={crName} namespace={objectNamespace} />;
+    case 'BreakRequestTemplate':
+      return <BreakRequestTemplateDetail name={crName} namespace={objectNamespace} />;
     case 'CapsuleConfiguration':
       return <CapsuleConfigurationDetail name={crName} />;
     case 'Tenant':
@@ -48,6 +63,8 @@ export function CapsuleCustomResourceDetail({ kind }: { kind: CapsuleCustomResou
       return <CustomQuotaDetail name={crName} namespace={objectNamespace} />;
     case 'GlobalCustomQuota':
       return <GlobalCustomQuotaDetail name={crName} />;
+    case 'GlobalBreakRequestTemplate':
+      return <GlobalBreakRequestTemplateDetail name={crName} />;
     case 'GlobalProxySettings':
       return <GlobalProxySettingsDetail name={crName} />;
     case 'GlobalResourceQuota':
@@ -64,6 +81,10 @@ export function CapsuleCustomResourceDetail({ kind }: { kind: CapsuleCustomResou
 /** Reuses each plugin overview at the canonical Headlamp CRD list URL. */
 export function CapsuleCustomResourceList({ kind }: { kind: CapsuleCustomResourceDetailKind }) {
   switch (kind) {
+    case 'BreakRequest':
+      return <BreakRequestsList />;
+    case 'BreakRequestTemplate':
+      return <BreakRequestTemplatesList />;
     case 'CapsuleConfiguration':
       return <CapsuleConfigurationList />;
     case 'Tenant':
@@ -74,6 +95,8 @@ export function CapsuleCustomResourceList({ kind }: { kind: CapsuleCustomResourc
       return <CustomQuotasList />;
     case 'GlobalCustomQuota':
       return <GlobalCustomQuotasList />;
+    case 'GlobalBreakRequestTemplate':
+      return <GlobalBreakRequestTemplatesList />;
     case 'GlobalProxySettings':
       return <GlobalProxySettingsList />;
     case 'GlobalResourceQuota':

@@ -2,15 +2,22 @@ import { SimpleTable } from '@kinvolk/headlamp-plugin/lib/CommonComponents';
 import Resource from '@kinvolk/headlamp-plugin/lib/components/common';
 import { Chip, Stack, Typography } from '@mui/material';
 import { useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import { CAPSULE_CRDS } from '../../resources/capsuleCustomResources';
 import { TenantOwner } from '../../resources/tenantOwners';
 import { Tenants } from '../../resources/tenants';
+import { getTenantSpaceNames } from '../../utils/tenantSpaces';
 import { AnchoredSectionBox as SectionBox } from '../common/AnchoredSectionBox';
 import { CapsuleResourceLink } from '../common/CapsuleResourceLink';
 import { ConditionsAndEvents } from '../common/ConditionsAndEvents';
 import { DetailsSectionStack } from '../common/DetailsSectionStack';
-import { TenantOwnerFlow } from './TenantOwnerFlow';
+import {
+  capsuleSubjectHref,
+  CapsuleSubjectLink,
+  openCapsuleSubjectActivity,
+} from '../subjects/CapsuleSubjectLink';
+import { normalizeCapsuleSubject } from '../subjects/subjectReferences';
+import { TenantOwnerFlow, type TenantOwnerSubjectLinkTarget } from './TenantOwnerFlow';
 import {
   referencedTenantsForOwner,
   tenantOwnerIdentity,
@@ -23,6 +30,7 @@ export interface TenantOwnerDetailProps {
 
 export function TenantOwnerDetail(props: TenantOwnerDetailProps) {
   const params = useParams<{ name: string }>();
+  const location = useLocation();
   const { name = params.name } = props;
   const [owners] = TenantOwner.useList();
   const [tenants] = Tenants.useList();
@@ -32,6 +40,20 @@ export function TenantOwnerDetail(props: TenantOwnerDetailProps) {
     const resolved = new Set(references.map(tenant => tenant.getName()));
     return tenantOwnerReportedTenantNames(owner).filter(tenantName => !resolved.has(tenantName));
   }, [owner, references]);
+  const referencedNamespaces = useMemo(
+    () => references.flatMap(tenant => getTenantSpaceNames(tenant)),
+    [references]
+  );
+  const ownerSubjectLink = useMemo<TenantOwnerSubjectLinkTarget | undefined>(() => {
+    const identity = tenantOwnerIdentity(owner);
+    const subject = normalizeCapsuleSubject(identity);
+    if (!subject) return undefined;
+    const target = capsuleSubjectHref(subject, referencedNamespaces, location.search);
+    return {
+      href: target.href,
+      open: () => openCapsuleSubjectActivity(subject, target.namespaces),
+    };
+  }, [location.search, owner, referencedNamespaces]);
 
   return (
     <Resource.DetailsGrid
@@ -42,7 +64,18 @@ export function TenantOwnerDetail(props: TenantOwnerDetailProps) {
         const identity = tenantOwnerIdentity(item);
         return [
           { name: 'Kind', value: <Chip size="small" label={identity.kind} /> },
-          { name: 'Identity', value: <Typography>{identity.name || '—'}</Typography> },
+          {
+            name: 'Identity',
+            value: identity.name ? (
+              <CapsuleSubjectLink
+                kind={identity.kind}
+                name={identity.name}
+                namespaces={referencedNamespaces}
+              />
+            ) : (
+              <Typography>—</Typography>
+            ),
+          },
           {
             name: 'Aggregate roles',
             value: (
@@ -76,7 +109,7 @@ export function TenantOwnerDetail(props: TenantOwnerDetailProps) {
                 Animated edges show every Tenant whose owner identity matches this TenantOwner.
                 Select a Tenant card to open its Capsule detail page.
               </Typography>
-              <TenantOwnerFlow owner={owner} tenants={references} />
+              <TenantOwnerFlow owner={owner} tenants={references} subjectLink={ownerSubjectLink} />
               <SimpleTable
                 columns={[
                   {

@@ -96,7 +96,7 @@ run_node() {
 build_bundle() {
   ensure_dependencies
   (cd "$REPO_ROOT" && run_node \
-    node_modules/@kinvolk/headlamp-plugin/bin/headlamp-plugin.js build)
+    node_modules/vite/bin/vite.js build --config vite.config.mjs)
   [ -s "$REPO_ROOT/dist/main.js" ] || fail "plugin build did not create dist/main.js"
 }
 

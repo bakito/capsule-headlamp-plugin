@@ -30,6 +30,10 @@ bundle hashes with:
 make headlamp-playground-status
 ```
 
+The build uses the repository's `vite.config.mjs` rather than the stock SDK
+builder so RJSF's MUI and lodash-es submodule imports resolve against the shared
+libraries exposed by Headlamp 0.44.
+
 After the development session, hand control back to Flux:
 
 ```sh
@@ -113,17 +117,17 @@ make headlamp-render
 
 The scripts accept these environment variables:
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `KUBE_CONTEXT` | current context | Target Kubernetes context |
-| `HEADLAMP_NAMESPACE` | `capsule-system` | Deployment namespace |
-| `HEADLAMP_CHART_VERSION` | `0.44.0` | Pinned chart version |
-| `HEADLAMP_PORT` | `8081` | Local port-forward port |
-| `PLUGIN_IMAGE` | `capsule-headlamp-plugin:dev` | Development image reference |
-| `PLUGIN_PULL_POLICY` | `Never` on kind | Init-container pull policy |
-| `KIND_CLUSTER` | inferred from context | kind cluster name |
-| `PUSH_PLUGIN_IMAGE` | `0` | Push the image for a non-kind cluster |
-| `NODE_BIN` | automatic | Explicit Node 22/24 executable |
+| Variable                 | Default                       | Purpose                               |
+| ------------------------ | ----------------------------- | ------------------------------------- |
+| `KUBE_CONTEXT`           | current context               | Target Kubernetes context             |
+| `HEADLAMP_NAMESPACE`     | `capsule-system`              | Deployment namespace                  |
+| `HEADLAMP_CHART_VERSION` | `0.44.0`                      | Pinned chart version                  |
+| `HEADLAMP_PORT`          | `8081`                        | Local port-forward port               |
+| `PLUGIN_IMAGE`           | `capsule-headlamp-plugin:dev` | Development image reference           |
+| `PLUGIN_PULL_POLICY`     | `Never` on kind               | Init-container pull policy            |
+| `KIND_CLUSTER`           | inferred from context         | kind cluster name                     |
+| `PUSH_PLUGIN_IMAGE`      | `0`                           | Push the image for a non-kind cluster |
+| `NODE_BIN`               | automatic                     | Explicit Node 22/24 executable        |
 
 For a non-kind cluster, use a registry reference and explicitly allow the push:
 

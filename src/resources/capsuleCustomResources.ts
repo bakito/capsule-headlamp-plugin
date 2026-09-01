@@ -1,6 +1,9 @@
 export const CAPSULE_CRDS = {
+  BreakRequest: 'breakrequests.capsule.clastix.io',
+  BreakRequestTemplate: 'breakrequesttemplates.capsule.clastix.io',
   CapsuleConfiguration: 'capsuleconfigurations.capsule.clastix.io',
   CustomQuota: 'customquotas.capsule.clastix.io',
+  GlobalBreakRequestTemplate: 'globalbreakrequesttemplates.capsule.clastix.io',
   GlobalCustomQuota: 'globalcustomquotas.capsule.clastix.io',
   GlobalProxySettings: 'globalproxysettings.capsule.clastix.io',
   GlobalResourceQuota: 'globalresourcequotas.capsule.clastix.io',

@@ -4,11 +4,13 @@ import { useMemo } from 'react';
 import { CAPSULE_CRDS } from '../../resources/capsuleCustomResources';
 import { TenantOwner } from '../../resources/tenantOwners';
 import { Tenants } from '../../resources/tenants';
+import { getTenantSpaceNames } from '../../utils/tenantSpaces';
 import { CapsuleResourceLink } from '../common/CapsuleResourceLink';
 import { ConditionStatusChip } from '../common/ConditionStatusChip';
 import { anchoredResourceListHeaderProps } from '../common/SectionAnchor';
 import { StatCard } from '../common/StatCard';
 import { SummaryCardGrid } from '../common/SummaryCardGrid';
+import { CapsuleSubjectLink } from '../subjects/CapsuleSubjectLink';
 import { referencedTenantsForOwner, tenantOwnerIdentity } from './tenantOwnerReferences';
 
 function readyCondition(item: any) {
@@ -115,6 +117,19 @@ export function TenantOwnersList() {
             id: 'identity',
             label: 'Identity',
             getValue: item => tenantOwnerIdentity(item).name,
+            render: item => {
+              const identity = tenantOwnerIdentity(item);
+              const namespaces = referencedTenantsForOwner(item, tenants).flatMap(tenant =>
+                getTenantSpaceNames(tenant)
+              );
+              return (
+                <CapsuleSubjectLink
+                  kind={identity.kind}
+                  name={identity.name}
+                  namespaces={namespaces}
+                />
+              );
+            },
           },
           {
             id: 'cluster-roles',

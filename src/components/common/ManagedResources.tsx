@@ -171,27 +171,33 @@ export function useFetchedResources(applied: any[]): KubeObject[] {
 
 function ManagedResourcesTable({
   applied,
+  inventoryTitle,
   resources,
   onInspect,
   tableId,
 }: {
   applied: any[];
+  inventoryTitle: string | null;
   resources: KubeObject[];
   onInspect: (item: KubeObject) => void;
   tableId: string;
 }) {
   return (
     <ResourceListView
-      title="Managed resource inventory"
+      title={inventoryTitle}
       id={tableId}
       data={resources}
       defaultSortingColumn={{ id: 'name', desc: false }}
       enableRowActions={false}
       enableRowSelection={false}
       reflectInURL={false}
-      headerProps={anchoredResourceListHeaderProps('Managed resource inventory', {
-        headerProps: { noNamespaceFilter: true },
-      })}
+      headerProps={
+        inventoryTitle
+          ? anchoredResourceListHeaderProps(inventoryTitle, {
+              headerProps: { noNamespaceFilter: true },
+            })
+          : { noNamespaceFilter: true }
+      }
       columns={[
         {
           id: 'name',
@@ -466,12 +472,14 @@ function SSADiffPanel({
 
 export interface ManagedResourcesProps {
   dependencies?: ReplicationDependency[];
+  inventoryTitle?: string | null;
   item?: any;
   title?: string;
 }
 
 export function ManagedResources({
   dependencies = [],
+  inventoryTitle = 'Managed resource inventory',
   item,
   title = 'Managed Resources',
 }: ManagedResourcesProps) {
@@ -560,6 +568,7 @@ export function ManagedResources({
       {applied.length > 0 && (
         <ManagedResourcesTable
           applied={applied}
+          inventoryTitle={inventoryTitle}
           resources={resources}
           onInspect={setSelected}
           tableId={`capsule-${String(item?.kind || item?.jsonData?.kind || 'replication-resource')

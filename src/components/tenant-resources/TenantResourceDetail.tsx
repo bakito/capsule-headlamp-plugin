@@ -20,6 +20,7 @@ import { ManagedResources } from '../common/ManagedResources';
 import { REPLICATION_RESOURCE_REFRESH_EVENT } from '../common/replicationCordon';
 import { ReplicationDependenciesSection } from '../common/ReplicationDependencies';
 import { AnchoredSubheading } from '../common/SectionAnchor';
+import { ImpersonationSubjectCell } from '../subjects/ImpersonationSubjectCell';
 
 export interface TenantResourceDetailProps {
   name?: string;
@@ -84,6 +85,7 @@ export function TenantResourceDetail(props: TenantResourceDetailProps) {
           if (!item) return [];
           const numSpecResources = getSpecResourcesCount(item);
           const numStatusResources = getAppliedCount(item);
+          const itemNamespace = item.getNamespace() || namespace;
           return [
             {
               name: 'Resource Rules',
@@ -99,6 +101,16 @@ export function TenantResourceDetail(props: TenantResourceDetailProps) {
                 <Typography>
                   {item.spec?.resyncPeriod || item.jsonData?.spec?.resyncPeriod || '—'}
                 </Typography>
+              ),
+            },
+            {
+              name: 'Impersonation ServiceAccount',
+              value: (
+                <ImpersonationSubjectCell
+                  fallbackNamespace={itemNamespace}
+                  namespaces={itemNamespace ? [itemNamespace] : []}
+                  reference={item.spec?.serviceAccount}
+                />
               ),
             },
           ];

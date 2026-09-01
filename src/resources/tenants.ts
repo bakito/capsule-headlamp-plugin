@@ -78,6 +78,11 @@ export interface TenantsObject extends KubeObjectInterface {
       message: string;
     }>;
     namespaces?: string[] | number;
+    owners?: Array<{
+      clusterRoles?: string[];
+      kind: 'User' | 'Group' | 'ServiceAccount' | string;
+      name: string;
+    }>;
     size?: number;
     spaces?: Record<string, any> | any[];
     promotions?: Array<{

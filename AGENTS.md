@@ -53,7 +53,11 @@ overridden.
 ## Repository notes
 
 - `npm start` runs the standalone plugin development server on port 4466.
-- `npm run build` produces the plugin bundle in `dist/`.
+- `npm run build` produces the plugin bundle in `dist/` through the repository's
+  `vite.config.mjs`. That configuration extends Headlamp's SDK configuration and
+  corrects the shared MUI/lodash-es submodule globals used by RJSF. Keep the
+  in-cluster scripts on this configuration; the stock SDK builder emits invalid
+  globals such as `IconButtonindex.js` for these imports under Headlamp 0.44.
 - The root `Dockerfile` packages the built bundle as files under
   `/plugins/capsule`; it is intended to be used as a plugin init-container image,
   not as a standalone web server.
@@ -201,10 +205,15 @@ replace it with API- and verb-scoped roles there.
   used inside `DetailsGrid`. It groups multiple Capsule subsections while
   preserving Headlamp's metadata/events grid alignment.
 - `src/components/common/AnchoredSectionBox.tsx` adds shareable anchors to
-  Capsule subsections. It must import `SectionBox` from Headlamp's public
-  `CommonComponents` entry point. A deep `components/common/SectionBox` import
-  can type-check and bundle successfully but is unavailable in Headlamp's
-  browser plugin API, causing every wrapped subsection to disappear at runtime.
+  Capsule subsections. `SectionAnchorLink` reads the reactive
+  `sectionAnchorsEnabled` plugin setting. Anchors default on in the web app and
+  off in Headlamp Desktop/Electron because Desktop reserves the URL hash for
+  routing; do not render an `href="#..."` there unless the user explicitly
+  enables **Shareable section links**. It must import `SectionBox` from
+  Headlamp's public `CommonComponents` entry point. A deep
+  `components/common/SectionBox` import can type-check and bundle successfully
+  but is unavailable in Headlamp's browser plugin API, causing every wrapped
+  subsection to disappear at runtime.
 - This pattern is applied to Tenant, all dedicated quota/ResourcePool pages,
   TenantResource, and GlobalTenantResource detail views. Tenant identity/links,
   scheduling/class information, and its namespace graph are proper `SectionBox`
@@ -398,11 +407,12 @@ SCOPE`. The namespaced view counts unique CustomQuota namespaces; the global
   `/customresources/:crd/:namespace/:crName`; cluster-scoped objects use `-` for
   the namespace segment.
 - `src/components/common/CapsuleCustomResourceDetail.tsx` is only an adapter. It
-  reuses the existing rich list/detail components for Tenant, TenantOwner,
-  CustomQuota, GlobalCustomQuota, GlobalResourceQuota, GlobalProxySettings,
+  reuses the existing rich list/detail components for BreakRequest,
+  BreakRequestTemplate, GlobalBreakRequestTemplate, Tenant, TenantOwner, CustomQuota,
+  GlobalCustomQuota, GlobalResourceQuota, GlobalProxySettings,
   CapsuleConfiguration, ResourcePool, TenantResource, and GlobalTenantResource.
   Do not create a second implementation for CRD routes.
-- Literal list and instance routes for those ten CRDs are registered before
+- Literal list and instance routes for those thirteen CRDs are registered before
   Headlamp's generic `:crd` routes. Thus the Custom Resources navigation,
   Capsule overview tiles, sidebar leaves, and direct CR instance URLs all use
   the same plugin UI. The older `/capsule/...` list/detail routes remain aliases
@@ -426,9 +436,11 @@ SCOPE`. The namespaced view counts unique CustomQuota namespaces; the global
   Only absolute HTTP(S) base URLs are accepted; blank, invalid, or unsafe values
   fall back to `https://projectcapsule.dev`. Relative resource paths retain their
   anchors when joined to a configured mirror base.
-- Headlamp **Settings → Plugins → capsule** exposes `documentationBaseUrl`
-  through `CapsuleSettings.tsx`. The saved base is reactive through Headlamp's
-  `ConfigStore`, so detail actions use it without a plugin rebuild.
+- `capsulePluginConfig.ts` owns the shared typed `ConfigStore`. Headlamp
+  **Settings → Plugins → capsule** exposes `documentationBaseUrl` and the
+  `sectionAnchorsEnabled` switch through `CapsuleSettings.tsx`. Saved values are
+  reactive, so documentation actions and section links update without a plugin
+  rebuild.
 
 ## Tenant pages and navigation
 
@@ -546,9 +558,224 @@ links configured` filler. An empty selection means **No Tenant Filter** and
 - The standalone `Cordoning` detail subsection was removed; the action remains
   in Headlamp's detail header and the current state remains in metadata and the
   graph.
-- Capsule navigation is grouped into nested `Tenant`, `Quotas`, and
-  `Replications` sidebar sections. Keep route sidebar IDs attached to their leaf
-  entry so Headlamp expands the active subsection automatically.
+- Capsule navigation is grouped into nested `Tenant`, `Quotas`, `Replications`,
+  and `Break the Glass` sidebar sections. Keep route sidebar IDs attached to
+  their leaf entry so Headlamp expands the active subsection automatically.
+
+## Break the Glass
+
+- The Capsule v1beta2 Break-the-Glass API consists of namespaced
+  `BreakRequest` and `BreakRequestTemplate` objects plus cluster-scoped
+  `GlobalBreakRequestTemplate` objects. Capsule navigation exposes **Requests**
+  and **Templates** under **Break the Glass**. The Templates leaf is a combined
+  catalog of readable namespaced and global templates with explicit Scope and
+  Namespace Availability columns. Query both APIs independently: a denied or
+  empty namespaced API must not suppress global results, and vice versa. Both
+  kinds also retain their canonical rich list/detail routes. Keep Approvers out
+  of template overview tables; approval subjects belong in the detail view.
+- `src/resources/breakRequests.ts` provides direct v1beta2 resource classes.
+  The dedicated lists and details must use those API endpoints and must not
+  depend on permission to read CustomResourceDefinitions. Their literal
+  canonical routes and `/capsule/...` aliases reuse the same page components.
+- BreakRequest users commonly receive namespaced access through Tenant
+  RoleBindings without permission for a cluster-wide list. `BreakRequestList`
+  therefore parses Headlamp's space-delimited `?namespace=` filter and passes
+  the explicit Namespace array to `BreakRequest.useList`; the table renders
+  that same data instead of mounting a second unscoped resource-class query.
+  Do not restore a bare `BreakRequest.useList()` or a `ResourceListView`
+  `resourceClass` fetch on this page, because either can call the all-Namespaces
+  endpoint and return Forbidden for otherwise-authorized Tenant owners.
+- `BreakRequestDetail.tsx` keeps Conditions and Events first, then request
+  lifecycle, parameters, and the visual chronological audit timeline. Timeline
+  stages use distinct filled/tinted colors for quick scanning. Timeline cards
+  identify how and by whom the request was created, reviewer identity, verdict,
+  review comment, and reported transition time; subject actors link to their
+  correlated summary page. Controller-authored stages resolve to the concrete
+  `status.serviceAccount` identity when reported, instead of leaving an
+  unlinked `Capsule controller` label. A **Review Verdict** summary renders only
+  after status contains an Approved or Denied verdict; the normal detail page
+  deliberately does not duplicate rendered approval resources.
+  The Request and Parameters tables each use an explicit Expand/Collapse action
+  and start collapsed for every newly opened BreakRequest; Audit Trail and
+  Review Verdict remain visible. ServiceAccount subject links include the
+  request Namespace and the status-reported ServiceAccount Namespace so the
+  correlated drawer can discover both access and execution-identity bindings.
+  Reviewable phases open `BreakRequestReviewActivity.tsx` as a temporary
+  right-side Headlamp tab from the list, detail, and Subject summary. The tab
+  shows only the resulting per-target live object changes plus the required
+  verdict/comment form; do not restore separate rendered-manifest or unrendered
+  template-source sections. Every resulting-change entry is a collapsed MUI
+  Accordion whose header retains the target identity and Create/Change/No
+  change state. Live comparison projects the current object onto only
+  manifest-owned fields so generated metadata and status are not shown as
+  deletions.
+- `BreakRequestCLICommand.tsx` renders the copyable terminal alternative in the
+  Review drawer and Expire confirmation. Keep the commands derived from the
+  exact object identity: `kubectl capsule btg review <name> -n <namespace>` and
+  `kubectl capsule btg expire <name> -n <namespace>`. The review command remains
+  interactive so the CLI can present the snapshot and accept approve/deny plus
+  its optional timing flags; do not append transient web-form values.
+- `status.approved.resources` is the authoritative immutable review snapshot;
+  `status.resources` remains only a compatibility fallback for older objects.
+  Approval is disabled until `status.approved` exists, even when Ready=True,
+  while Decline remains available. Review submission merge-patches
+  `/status` with phase, verdict, and comment. Never send or infer a reviewer
+  identity in the browser: the admission webhook authenticates and records it.
+- BreakRequest lifecycle actions are first-class controls. Review and Expire
+  are separate detail-header actions and separate columns in the main and
+  Subject BreakRequest tables. Review opens its right-side activity; Expire
+  uses a themed in-application confirmation dialog for the irreversible
+  revocation and patches only
+  `status.phase: Expired` on `/status`. The admission webhook reconstructs the
+  previous controller-owned status, and the Expire action is hidden once the
+  terminal phase is reached.
+- Reviewers can adjust the effective Duration and Start time before approval.
+  Initialize both controls from `status.approved`, convert the API timestamp to
+  and from the browser-local `datetime-local` value, and include only
+  `status.approved.duration/startTime` with the approval transition. A cleared
+  Duration submits explicit `0s` so template defaults cannot replace the
+  reviewer's intentional unlimited window; Start time remains required for an
+  approval. Declines do not submit lifecycle overrides. Rendered resources,
+  keep-for policy, resolved identity, and template identity remain
+  controller-owned and must never be copied into the browser patch.
+- The BreakRequest list has a prominent **New BreakRequest** button that opens
+  `CreateBreakRequestActivity.tsx` on the right. Creation combines namespaced
+  `BreakRequestTemplate` objects from the selected Namespace scope with
+  `GlobalBreakRequestTemplate` objects reported as available there. Either API
+  may be forbidden without hiding templates returned by the other. The catalog
+  has an AND-style multi-tag Autocomplete plus
+  free-text search across template name, description, and tags; it must not
+  return to an exclusive native template dropdown. Templates render as
+  selectable cards in category grids. The first declared
+  `info.projectcapsule.dev/tags` value is the primary category so a template
+  appears exactly once; remaining tags still filter it, and untagged templates
+  appear last under **Uncategorized**. Selecting a card performs a named GET and
+  passes its unflattened JSON Schema 2020-12 `spec.paramSchema` to the shared
+  RJSF/MUI form with the Ajv 2020 validator. Preserve nested objects and arrays,
+  composition branches, defaults, enums, and native schema constraints. The
+  right-side form is a two-step
+  wizard: **Setup** collects formal request information, then **Template
+  Parameters** shows only schema-derived inputs. Users can submit an exact
+  metadata name or enable a generated name, which sends
+  `metadata.generateName` and links the API-returned concrete object. Bordered,
+  tinted panels and increased spacing separate the template, field groups, and
+  final action. Both wizard steps expose an optional **View YAML** action. It
+  must serialize the same `buildCreateBreakRequest()` body used by Create into
+  an in-app preview with Copy and Download controls; previewing or exporting
+  must not submit a request, and the requestor remains absent because admission
+  injects it. An empty request Duration means unlimited access without an
+  expiration timestamp; keep that explicit in the helper text and do not claim
+  an empty value uses `spec.defaultDuration`. Create sends the direct namespaced
+  BreakRequest API payload without `spec.requestor`; admission must inject the
+  authenticated identity. Template list/get access remains an explicit
+  prerequisite and gets its own diagnostic when denied.
+- `breakRequestJsonSchema.ts` recursively discovers `x-capsule-form` at the
+  schema root and under JSON Schema 2020-12 containment, composition,
+  conditional, map, and local `$defs`/`definitions` reference paths. Local
+  reference traversal must stop loops. A `kubernetes-resource` extension on a
+  scalar string renders one selected string; an extension on an array item
+  schema renders a multi-select whose form value remains `string[]`, so Ajv
+  continues to enforce `minItems`, `maxItems`, and `uniqueItems`. Treat
+  `x-kubernetes-validations` as an allowed opaque server-side keyword and show
+  any Kubernetes admission error returned on create.
+- Schemas carrying `x-capsule-form.widget: kubernetes-resource` render through
+  `KubernetesResourceSchemaFieldInput.tsx`. It discovers the source
+  `apiVersion`/`kind`, resolves the listable plural resource and namespaced
+  scope, then lists options with the signed-in Headlamp identity. Honor
+  `source.namespace` values `request`, `*`, and literal Namespaces plus both
+  label/field selectors. Omitted Namespace means the BreakRequest Namespace
+  for namespaced GVKs and cluster scope for cluster-scoped GVKs.
+  `breakRequestKubernetesResource.ts` owns discovery/list URL construction and
+  browser-safe option rendering. Label/value templates default to
+  `{{ .metadata.name }}` and support static text with Go-template object-path
+  substitutions; never evaluate arbitrary template functions in the browser.
+  A discovery, RBAC, list, missing-key, or unsupported-expression failure is
+  local to that form field and must remain actionable without crashing the
+  wizard. Do not treat visible picker options as an authorization or validation
+  boundary; Capsule remains authoritative.
+- Active requests reuse `ManagedResources` for the animated request-to-resource
+  XY flow, live inventory, and inline SSA inspection. Render it only once a
+  request is Active or the controller reports processed items; pre-approval
+  rendered resource groups are approval data rather than live inventory. On a
+  BreakRequest detail, pass `inventoryTitle={null}` so the searchable inventory
+  table follows the diagram directly without a redundant **Managed resource
+  inventory** heading; TR/GTR pages retain their inventory heading.
+- `GlobalBreakRequestTemplateDetail.tsx` provides the shared rich detail for
+  both template kinds: approval mode/subjects/CEL, lifecycle and retention,
+  parameter schema, and every direct or templated resource group. Global
+  templates additionally show resolved Namespace availability as a linked
+  table; namespaced templates use their object Namespace. Templates use
+  the conventional `info.projectcapsule.dev/icon` and
+  `info.projectcapsule.dev/description` annotations as catalog presentation;
+  the icon/description preview appears in the list, create selector, selected
+  template panels, and detail overview. Unsafe icon references are rejected.
+- Request Template details expose the configured `spec.impersonation`
+  ServiceAccount as a linked Subject chip in lifecycle metadata; do not show
+  impersonation in the list overview. When that optional override is absent,
+  show **Capsule default identity** without inventing an exact subject; the
+  concrete default can depend on controller/CapsuleConfiguration state that is
+  not part of the template object.
+
+## Subject references
+
+- `CapsuleSubjectLink.tsx` is the reusable navigation surface for Capsule and
+  Kubernetes subjects. Tenant owners, TenantOwner identities, BreakRequest
+  requestors/reviewers/rendered RBAC subjects, request-template approvers,
+  impersonation ServiceAccounts, and Proxy subjects all link to
+  `/capsule/subjects/:kind/:subject`. Preserve the current Namespace query when
+  available; a source object may provide a more precise Namespace scope.
+- A normal subject click uses Headlamp's public `Activity` API to open a
+  temporary `split-right` subject-summary tab, matching native resource-detail
+  links. Ctrl/Cmd/Shift/Alt clicks retain the cluster-aware full-page URL.
+  Reconciled owner identities in the Tenant-to-Namespace flow and the identity
+  in the TenantOwner relationship source use the same activity link; keep their
+  React Flow nodes explicitly pointer-enabled.
+- `subjectReferences.ts` owns exact identity normalization and matching.
+  ServiceAccounts expressed as `namespace/name` or
+  `system:serviceaccount:namespace:name` are the same identity, while equal
+  ServiceAccount names in different Namespaces remain distinct.
+- `CapsuleSubjectSummary.tsx` correlates every visible Tenant owner/promotion,
+  BreakRequest requestor/requestor group/reviewer/execution ServiceAccount/rendered
+  RBAC subject, native RoleBinding/ClusterRoleBinding subject, GlobalProxySettings
+  rule subject, and TenantOwner whose `spec.kind/spec.name` is the exact
+  normalized identity. Its relationship-section order is Tenants, Tenant Owners,
+  Break Requests, Global Proxy Settings, then Bindings.
+  Relationship tables and their headings render only when they contain at
+  least one hit; API access diagnostics remain independent of those empty
+  sections. Tenant, namespaced RBAC, cluster RBAC, BreakRequest,
+  GlobalProxySettings, and TenantOwner requests remain independent: show an API-specific access
+  diagnostic when one inventory is forbidden and retain any other readable
+  inventories. Namespaced RBAC and BreakRequest queries must reuse the explicit
+  `?namespace=` array and must not fall back to a second unscoped list.
+
+## Capsule resource tags
+
+- Every supported Capsule resource accepts the comma-separated annotation
+  `info.projectcapsule.dev/tags`. `components/tags/capsuleTags.ts` is the shared
+  parser: trim values, discard empty entries, preserve declaration order, and
+  de-duplicate exact strings. Tag matching is exact and case-sensitive.
+- `CapsuleTagsTable.tsx` adds the same clickable Tags column through Headlamp's
+  public resource-table processor to every dedicated Capsule CR inventory, the
+  Namespace-owned CustomQuota/TenantResource inventories, and the generic
+  ResourcePoolClaim table. Do not copy tag columns into individual list pages.
+  `CapsuleTagsDetailsIntegration.tsx` similarly adds a Tags row to the standard
+  metadata panel of every annotated `capsule.clastix.io` detail page.
+- Clicking a tag opens `CapsuleTagSummary.tsx` as a temporary `split-right`
+  activity, matching Subject navigation. The canonical
+  `/capsule/tags/:tag` route remains available for modified clicks and direct
+  URLs. Namespaced links union the source object's Namespace with the current
+  `?namespace=` scope; cluster-scoped links preserve the current scope.
+- The tag inventory independently queries all 14 supported Capsule kinds:
+  BreakRequest, BreakRequestTemplate, CapsuleConfiguration, CustomQuota,
+  GlobalBreakRequestTemplate, GlobalCustomQuota, GlobalProxySettings,
+  GlobalResourceQuota, GlobalTenantResource, ResourcePool, ResourcePoolClaim,
+  Tenant, TenantOwner, and TenantResource. One forbidden or optional API must
+  produce a concise partial-access diagnostic without hiding results from
+  readable APIs. Rows link to canonical rich resource details.
+- README metadata documentation covers shared tags and includes a valid
+  `BreakRequestTemplate` example showing that both template kinds support
+  `info.projectcapsule.dev/icon` and `info.projectcapsule.dev/description` also
+  drive template list, detail, and New BreakRequest catalog presentation.
 
 ## TenantOwner pages
 
@@ -642,7 +869,12 @@ links configured` filler. An empty selection means **No Tenant Filter** and
 - TenantResource and GlobalTenantResource list overviews use a balanced
   two-column `SummaryCardGrid` for their CR and replicated-resource graphs. Both
   list tables include Ready and Message columns sourced from the CR's Ready
-  condition; messages fall back to the condition reason when needed.
+  condition; messages fall back to the condition reason when needed. Do not
+  expose impersonation in these overview tables. Each detail metadata panel
+  instead links the configured `spec.serviceAccount` to the shared Subject
+  activity: TenantResource derives the ServiceAccount Namespace from the
+  namespaced CR, while GlobalTenantResource uses the reference's explicit
+  Namespace.
 - The Managed resource inventory is a standard Headlamp `ResourceListView`, not
   a `SimpleTable`. It provides global search, sortable/filterable columns,
   select filters for Namespace/Kind/Ready, and defaults to Name ascending. TR
@@ -1069,3 +1301,149 @@ future agents. Update them whenever the environment changes.
   `make headlamp-sync` is ephemeral. Always finish with `make headlamp-deploy`,
   select the newest Running pod, restart the port-forward, and compare local,
   pod, and served bundle checksums as described above.
+- The BreakRequest audit table is now a stage-colored chronological timeline,
+  with visibly filled/tinted stage bubbles, linked requestor/reviewer actors,
+  controller stages linked through the status-reported execution ServiceAccount,
+  and linked subjects extracted from rendered RBAC manifests. Subject links
+  across Tenant, TenantOwner, BreakRequest, both BreakRequest template kinds, and
+  GlobalProxySettings open the permission-aware Tenant/RBAC/BreakRequest
+  correlation page.
+- The Subject activity orders Tenants, Tenant Owners, Break Requests, Global
+  Proxy Settings, then Bindings and omits every empty relationship heading/table.
+  Review and Expire are dedicated detail-header and table buttons. Reviewable
+  requests open the right-side resulting-changes/verdict activity; Expire uses
+  a confirmed terminal status transition. The BreakRequest list also opens a
+  prominent template-first, two-step JSON-schema-driven creation activity with
+  generated naming and annotated catalog previews. The ordinary request detail hides
+  rendered approval resources and shows a verdict overview only for completed
+  reviews. Validation did not submit Review, Expire, or Create mutations.
+- GlobalProxySettings subject correlation is constrained by the signed-in
+  account's Capsule Proxy view. In the playground, Alice's policy is sourced
+  from `solar-proxy-settings`, but a list of GlobalProxySettings returns HTTP
+  200 with zero items because the policy does not grant List on that resource.
+  The browser cannot safely recover the hidden policy name or contents; do not
+  infer names from Tenant names or use a privileged identity. To expose those
+  rows, the matching GlobalProxySettings policy must itself grant selector-
+  scoped List access to `globalproxysettings` (and label the setting so that
+  selector can isolate it), or Capsule Proxy must provide a dedicated
+  self-policy introspection API.
+- On 2026-08-31, formatting, lint, TypeScript, all 233 tests across 52 files,
+  and the production build passed with Node 24. The build transforms 324
+  modules and emits a 576.77 kB `main.js` (160.34 kB gzip).
+- Authenticated Chromium verified the template overview and linked Namespace
+  availability table, filled audit colors, completed-versus-pending verdict
+  visibility, both default-collapsed BreakRequest data tables and their expand
+  action, the linked status ServiceAccount actor, the admin-visible User/alice
+  subject page's matching `solar-proxy-settings` section, and both Setup/Template Parameters
+  wizard pages including generated naming. It also verified that Request
+  Template, GlobalTenantResource, and TenantResource list overviews omit
+  impersonation, while all three detail metadata panels expose it; both
+  replication details show their expected linked ServiceAccounts and a template
+  without an explicit override shows **Capsule default identity**. The Setup
+  form explicitly describes an empty Duration as unlimited with no expiration
+  timestamp. Intercepted read responses additionally
+  verified comma-separated tag chips in a Capsule list and detail metadata, the
+  right-side Tag activity, and one combined result table containing a tagged
+  Tenant and GlobalBreakRequestTemplate. The runs reported no React/plugin
+  runtime errors and did not submit any mutation or alter cluster objects. The
+  New BreakRequest browser run also verified removal of the exclusive template
+  dropdown, multi-tag AND filtering, composed text search, primary-tag category
+  grids, card selection, and continuation through Setup to Template Parameters.
+  A second run used the live `x-capsule-form` template schema and real Kubernetes
+  discovery/list responses to select a CustomResourceDefinition, then intercepted
+  the final create request and confirmed the mapped raw name in `spec.params`;
+  the POST did not reach Kubernetes. A review-mode run used the real pending
+  `solar-test/customquotas-editor-alice` snapshot and verified that only
+  **Resulting Changes** remains, all three entries start collapsed and expand,
+  and effective Duration/Start time values are prefilled and editable. Its
+  intercepted approval carried the adjusted duration and UTC-normalized start
+  time without resources or reviewer identity; the PATCH did not reach
+  Kubernetes. A later read-only run verified the exact Review and Expire CLI
+  commands on their real surfaces, copied both values through the browser
+  clipboard, cancelled Expire, and confirmed the BreakRequest managed-resource
+  table follows its diagram without the redundant inventory heading. Because
+  the former pending request had since become Active externally, that run
+  intercepted only its named GET to present the existing snapshot as Requested;
+  no lifecycle mutation was sent and all live phases remained unchanged.
+- The Flux playground reload is ready with matching local/pod SHA-256
+  `244279798c935e3556c76ce2ea3f1ede6d57dbe77d751f6db321396c83ff1865`,
+  and Flux was resumed afterward. Authenticated Chromium verified the Requests
+  and Templates menu labels, the dedicated namespaced template overview,
+  namespaced/global catalog cards and scope labels, the compact global table,
+  local-template Setup loading, explicit review verdict, and prominent audit
+  Timestamp without React/plugin runtime errors. Read-only impersonation
+  confirmed Alice can
+  list BreakRequests and RoleBindings in the four selected solar Namespaces,
+  and can create/update BreakRequest status, while Tenant,
+  ClusterRoleBinding, and GlobalBreakRequestTemplate list/get remain denied.
+  The subject and create activities therefore retain explicit independent
+  diagnostics for those cluster-scoped prerequisites.
+- On 2026-09-01, formatting, lint, TypeScript, all 236 tests across 53 files,
+  and the production build passed with Node 24. The build transforms 325
+  modules and emits a 577.49 kB `main.js` (160.60 kB gzip). Section fragment
+  links now use the reactive **Shareable section links** plugin setting; unit
+  coverage verifies the web default, Desktop-disabled default, and explicit
+  override. The Flux playground reload has matching local/pod SHA-256
+  `af75a45d95d13c0b85518e0a6efecfbe9e577b1fcf55444d8be1266690ac02d4`,
+  and Flux was resumed afterward.
+- The 2026-09-01 template-catalog regression check found zero live namespaced
+  BreakRequestTemplates and three live GlobalBreakRequestTemplates. The
+  combined Templates inventory now retains those global entries, summarizes
+  their resolved Namespace availability, and keeps partial API errors
+  non-fatal. TypeScript, lint, all 237 tests across 53 files, and the production
+  build passed. The deployed bundle SHA-256 is
+  `29e241cc5083c54512fa86a581d720a9cd9ab97b2f32e1fcf308bb3ba23d026c`.
+- On 2026-09-01, BreakRequest parameter creation moved from the flat custom
+  parser to RJSF/MUI backed by Ajv's JSON Schema 2020-12 implementation.
+  Recursive `x-capsule-form` discovery covers the complete supported schema
+  keyword set and loop-safe local references; Kubernetes resource selectors
+  support arbitrary discovered GVKs, all Namespace modes/selectors/templates,
+  scalar strings, and array-item `string[]` values. Formatting, lint,
+  TypeScript, all 251 tests across 56 files, and the production build passed
+  with Node 24. The build transforms 758 modules and emits an 862.42 kB
+  `main.js` (250.62 kB gzip). The live playground schemas included both a
+  scalar ClusterRole selector and the new ClusterRole/Namespace array-item
+  selectors. The served/local/pod bundle SHA-256 matched at
+  `3d25a875ee72773d430e0cedec2b9c31df46cc403372f08738c1620f3bf2104d`,
+  and Flux reconciliation was resumed afterward. Validation did not create or
+  mutate any Kubernetes resource.
+- BreakRequest audit sorting uses lifecycle precedence as the tie-breaker for
+  equal transition timestamps. This is required because the controller can
+  report `Active` before `Approved` in `status.conditions` while giving both
+  the same timestamp; the visible order must remain Approved then Active.
+  `breakRequestPhasePresentation()` is the single color/icon source for the
+  audit timeline, phase chips, subject results, and request-summary segments.
+  On 2026-09-01, TypeScript, lint, and all 253 tests across 56 files passed. The
+  playground build transforms 759 modules and emits an 862.77 kB `main.js`
+  (250.75 kB gzip). Local, pod, and the bundle served over Headlamp HTTP all
+  matched SHA-256
+  `cd84ca97e6dd9a291d67682a9fb5ece26a473e3c9f0a9c1ea5074321fb572822`;
+  Flux reconciliation was resumed afterward.
+- Later on 2026-09-01, a same-ReplicaSet pod replacement discarded that
+  pod-local injection and restored an older image bundle. The current bundle
+  was injected into `headlamp-f959cb88f-nwj6j`; only the Headlamp server
+  container was restarted, and `flux-system/headlamp` was deliberately left
+  suspended. Browser verification exposed and fixed two RJSF startup failures
+  caused by the stock SDK's MUI/lodash-es submodule globals. The repository now
+  builds through `vite.config.mjs`, which maps those dependencies to Headlamp's
+  actual shared exports. Formatting, lint, TypeScript, all 253 tests across 56
+  files, and the production build passed with Node 24. The build transforms 766
+  modules and emits an 871.15 kB `main.js` (253.19 kB gzip). Local, pod, and
+  browser-served bundle checksums match at
+  `92caed294621e4347b48a4ed314dbef3d46f3b5f6fea526d0261c1558d81111d`.
+  Authenticated clean Chromium renders the Capsule sidebar and rich
+  BreakRequest detail; its audit trail visibly orders equal-timestamp Approved
+  before Active. No HelmRelease resume or pod rollout was performed.
+- The New BreakRequest wizard now offers optional **View YAML** actions on both
+  Setup and Template Parameters. `BreakRequestYamlDialog.tsx` serializes the
+  same `buildCreateBreakRequest()` body used for submission, including the
+  JSON Schema form's applied defaults, and provides an in-app preview plus Copy
+  and Download; generated-name prefixes produce stable filenames, and
+  preview/export never calls the API. Formatting, lint,
+  TypeScript, all 255 tests across 57 files, and the production build passed.
+  Authenticated Chromium verified both live wizard steps, clipboard content,
+  the downloaded `yaml-preview-check.yaml` name, omission of `spec.requestor`,
+  and zero BreakRequest POSTs. Local, pod, and browser-served checksums match at
+  `8809942a083220d0463417b96a5f1cd8da465bece4c2c6c5715abad0c48ad3a4`;
+  the Flux HelmRelease remains suspended and only the Headlamp server container
+  was restarted.

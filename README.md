@@ -67,16 +67,25 @@ mirror or another documentation host, open **Settings → Plugins → capsule**,
 **Documentation base URL**, and save. The resource-specific `/docs/...` path and
 anchor are appended to the configured base URL.
 
-## Tenant Metadata Annotations
+The same plugin settings page includes **Shareable section links**. These
+fragment-link buttons are enabled by default in the web app and disabled by
+default in Headlamp Desktop, where URL hashes are used for routing. The switch
+can explicitly override either default.
 
-You can enrich how Tenants appear in the plugin by adding annotations to your `Tenant` resources.
+## Capsule Metadata Annotations
 
-| Annotation                            | Purpose                                      | Example Value                                                                   |
-| ------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------- |
-| `info.projectcapsule.dev/icon`        | Avatar/icon for the tenant                   | `https://example.com/my-tenant-icon.png`                                        |
-| `info.projectcapsule.dev/description` | Short description shown in lists and chooser | `Production tenant for the payments team`                                       |
-| `info.projectcapsule.dev/links`       | JSON links with per-link icons               | `'[{"title":"Dashboard","url":"https://...","icon":"fa-solid fa-chart-line"}]'` |
-| `info.projectcapsule.dev/banner`      | Banner image at the top of the tenant detail | `https://example.com/tenant-banner.jpg`                                         |
+You can enrich how Capsule resources appear in the plugin with `info.projectcapsule.dev`
+annotations. Tags work on every supported Capsule resource. Icon and description catalog
+metadata works for `Tenant`, `BreakRequestTemplate`, and `GlobalBreakRequestTemplate`; links and
+banners remain Tenant-specific.
+
+| Annotation                            | Applies to                      | Purpose                                      | Example Value                                                                   |
+| ------------------------------------- | ------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------- |
+| `info.projectcapsule.dev/icon`        | Tenant, both template kinds     | Avatar/icon shown in plugin catalog surfaces | `mdi:shield-key-outline`                                                        |
+| `info.projectcapsule.dev/description` | Tenant, both template kinds     | Short description shown in lists and chooser | `Temporary production diagnostics`                                              |
+| `info.projectcapsule.dev/tags`        | All supported Capsule resources | Comma-separated, clickable inventory tags    | `production, security, elevated-access`                                         |
+| `info.projectcapsule.dev/links`       | Tenant                          | JSON links with per-link icons               | `'[{"title":"Dashboard","url":"https://...","icon":"fa-solid fa-chart-line"}]'` |
+| `info.projectcapsule.dev/banner`      | Tenant                          | Banner image at the top of the tenant detail | `https://example.com/tenant-banner.jpg`                                         |
 
 **Example:**
 
@@ -88,6 +97,7 @@ metadata:
   annotations:
     info.projectcapsule.dev/icon: https://example.com/payments-icon.png
     info.projectcapsule.dev/description: Production tenant for the payments team
+    info.projectcapsule.dev/tags: production, payments, customer-facing
     info.projectcapsule.dev/links: '[{"title":"Grafana","url":"https://grafana.example.com/d/payments","icon":"fa-solid fa-chart-line"},{"title":"Runbook","url":"https://wiki.example.com/payments-runbook","icon":"fa-regular fa-file-lines"}]'
     info.projectcapsule.dev/banner: https://example.com/payments-banner.jpg
 spec:
@@ -96,7 +106,11 @@ spec:
       name: payments-team
 ```
 
-These annotations are used in the tenant chooser, tenant lists, tenant details, and the Capsule overview.
+Tenant catalog annotations are used in the tenant chooser, tenant lists, tenant details, and the
+Capsule overview. Tags are trimmed, empty entries are ignored, and duplicate entries are shown
+once. Every tag is a link: selecting one opens a right-side Headlamp tab containing all visible
+Capsule resources with the exact same tag. Results are permission-aware, so an unavailable API
+does not hide matches returned by other readable Capsule APIs.
 When `info.projectcapsule.dev/icon` is absent, Tenant surfaces use the official
 [CNCF Capsule color icon](https://github.com/cncf/artwork/tree/main/projects/capsule/icon/color)
 instead of generated initials.
@@ -117,6 +131,116 @@ does not mean “all Tenants.”
 > `<link-origin>/favicon.ico`, or provide an explicit favicon URL as the
 > `favicon` value. The icon appears with that link in Tenant lists, details, and
 > the selected Tenant context bar.
+
+### BreakRequest template catalog metadata
+
+Both namespaced `BreakRequestTemplate` and cluster-scoped `GlobalBreakRequestTemplate` use the
+same icon and description annotations as Tenants. The plugin shows them in template tables,
+template details, and the first step of the New BreakRequest flow. That flow combines readable
+local and global templates, provides free-text search and a multi-select tag filter, and requires
+every selected tag to match. Template cards are grouped by the first declared tag, while remaining
+tags remain filterable. Templates without tags appear under **Uncategorized**. Templates also
+support the shared tags annotation. In both Setup and Template Parameters, **View YAML** optionally
+opens the exact current BreakRequest manifest in an application dialog where it can be copied or
+downloaded without creating the request:
+
+```yaml
+apiVersion: capsule.clastix.io/v1beta2
+kind: BreakRequestTemplate
+metadata:
+  name: production-diagnostics
+  namespace: solar-prod
+  annotations:
+    info.projectcapsule.dev/icon: mdi:shield-search
+    info.projectcapsule.dev/description: Temporary read access for production diagnostics
+    info.projectcapsule.dev/tags: production, diagnostics, break-glass
+spec:
+  approvals:
+    approvers:
+      - kind: Group
+        name: production-approvers
+  defaultDuration: 1h
+  maxDuration: 4h
+  resources:
+    - policy:
+        creation: Owner
+        deletion: Remove
+        protect: true
+      targets:
+        - apiVersion: rbac.authorization.k8s.io/v1
+          kind: Role
+          metadata:
+            name: production-diagnostics
+          rules:
+            - apiGroups: ['']
+              resources: [pods, pods/log]
+              verbs: [get, list]
+```
+
+Icon values may be Iconify names, Font Awesome classes, or safe HTTP(S)/relative image URLs,
+using the same formats described above for Tenant icons.
+
+#### Kubernetes resource form fields
+
+A template parameter can use Capsule's `x-capsule-form` extension inside its JSON Schema 2020-12
+schema to load choices from an arbitrary Kubernetes GVK. Headlamp discovers the Kind's API
+resource, lists it with the signed-in user's permissions, and stores the rendered `valueTemplate`
+when the user selects the rendered `labelTemplate`:
+
+```yaml
+spec:
+  paramSchema:
+    type: object
+    required: [clusterRole]
+    properties:
+      clusterRole:
+        type: string
+        description: ClusterRole to distribute temporarily
+        x-capsule-form:
+          widget: kubernetes-resource
+          source:
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: ClusterRole
+            labelSelector: projectcapsule.dev/eligible=true
+          option:
+            labelTemplate: '{{ .metadata.name }}'
+            valueTemplate: '{{ .metadata.name }}'
+```
+
+Put the extension on an array's item schema to render a multi-select whose submitted value remains
+a JSON string array:
+
+```yaml
+spec:
+  paramSchema:
+    type: object
+    required: [clusterRoles]
+    properties:
+      clusterRoles:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items:
+          type: string
+          x-capsule-form:
+            widget: kubernetes-resource
+            source:
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: ClusterRole
+```
+
+The extension is also discovered through nested objects and arrays, composition/conditional
+keywords, and local `$defs`/`$ref` references. Other schema behavior—including required fields,
+defaults, enums, item bounds, uniqueness, and `oneOf`/`anyOf`/`allOf`—continues to be handled by
+the JSON Schema form and Ajv 2020 validator. `x-kubernetes-validations` is retained as an opaque
+server-side keyword; admission validation errors are displayed if Kubernetes rejects the request.
+
+For namespaced GVKs, `source.namespace` may be `request`, `*`, or a literal Namespace. Omitting it
+uses the BreakRequest Namespace; cluster-scoped GVKs are always listed at cluster scope. Optional
+`labelSelector` and `fieldSelector` values are forwarded to Kubernetes. Both option templates
+default to `{{ .metadata.name }}` and may combine static text with safe object paths, for example
+`{{ .metadata.name }} ({{ .metadata.namespace }})`. Discovery and list failures—including RBAC
+denials—are shown on the field without breaking the remaining form.
 
 ## TenantResources & GlobalTenantResources
 
@@ -208,6 +332,10 @@ when running Headlamp Desktop or Headlamp from source and load the plugin from
 npm run build
 npm run package
 ```
+
+The production build uses the repository's `vite.config.mjs`, which retains
+Headlamp's shared-library setup while making the RJSF JSON Schema renderer's
+MUI and lodash-es submodule imports compatible with Headlamp 0.44.
 
 This produces a `.tar.gz` file in the root that can be loaded via **Settings → Plugins → Load plugin from file**.
 
