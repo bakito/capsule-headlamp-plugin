@@ -3,12 +3,12 @@ import { AuthVisible } from '@kinvolk/headlamp-plugin/lib/components/common';
 import { Fragment, type ReactNode } from 'react';
 
 const EDITABLE_CAPSULE_TABLE_IDS = new Set([
-  'capsule-break-requests',
-  'capsule-break-request-templates',
+  'capsule-resource-permits',
+  'capsule-resource-permit-templates',
   'capsule-configurations',
   'capsule-custom-quotas',
   'capsule-global-custom-quotas',
-  'capsule-global-break-request-templates',
+  'capsule-global-resource-permit-templates',
   'capsule-global-proxy-settings',
   'capsule-global-resource-quotas',
   'capsule-global-tenant-resources',

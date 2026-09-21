@@ -104,11 +104,12 @@ function inventoryNameLink(item: KubeObject) {
 }
 
 /** Fetches the live KubeObjects represented by Capsule's applied inventory. */
-export function useFetchedResources(applied: any[]): KubeObject[] {
+export function useFetchedResources(applied: any[], cluster?: string): KubeObject[] {
   const [resources, setResources] = React.useState<KubeObject[]>([]);
 
   React.useEffect(() => {
     let active = true;
+    const cancellations: Array<() => void> = [];
     setResources([]);
 
     const addResource = (resource: KubeObject) => {
@@ -116,7 +117,7 @@ export function useFetchedResources(applied: any[]): KubeObject[] {
       setResources(previous => {
         const key = managedResourceKey(resource);
         return previous.some(item => managedResourceKey(item) === key)
-          ? previous
+          ? previous.map(item => (managedResourceKey(item) === key ? resource : item))
           : [...previous, resource];
       });
     };
@@ -127,23 +128,22 @@ export function useFetchedResources(applied: any[]): KubeObject[] {
 
       const builtIn = (K8s as any).ResourceClasses?.[target.kind];
       const fetchResource = (resourceClass: any) => {
-        resourceClass.apiGet(
+        const subscription = resourceClass.apiGet(
           (data: KubeObject) => addResource(data),
           target.name,
           target.namespace,
-          () => {
-            const stub: any = {
-              metadata: {
-                name: target.name,
-                namespace: target.namespace,
-                uid: `${target.apiVersion}/${target.kind}/${target.namespace || ''}/${target.name}`,
-              },
-              kind: target.kind,
-              apiVersion: target.apiVersion,
-            };
-            addResource(stub as KubeObject);
-          }
+          () => {},
+          { cluster }
         )();
+        Promise.resolve(subscription)
+          .then(cancel => {
+            if (typeof cancel !== 'function') return;
+            if (active) cancellations.push(cancel);
+            else cancel();
+          })
+          .catch(() => {
+            // The controller's processed-item row remains visible when its live GET fails.
+          });
       };
 
       if (builtIn) {
@@ -163,10 +163,26 @@ export function useFetchedResources(applied: any[]): KubeObject[] {
 
     return () => {
       active = false;
+      cancellations.forEach(cancel => cancel());
     };
-  }, [applied]);
+  }, [applied, cluster]);
 
-  return resources;
+  // Inventory membership comes from Capsule, independently of permission to read each live object.
+  return applied.map(entry => {
+    const target = parseTarget(entry);
+    const stub = {
+      apiVersion: target.apiVersion,
+      kind: target.kind,
+      metadata: {
+        name: target.name,
+        namespace: target.namespace,
+        uid: managedResourceKey(entry),
+      },
+    } as unknown as KubeObject;
+    return (
+      resources.find(resource => managedResourceKey(resource) === managedResourceKey(stub)) || stub
+    );
+  });
 }
 
 function ManagedResourcesTable({
@@ -187,6 +203,9 @@ function ManagedResourcesTable({
       title={inventoryTitle}
       id={tableId}
       data={resources}
+      // The source object's inventory can span namespaces outside the global Tenant filter.
+      // Keep every reported row and let Headlamp match nonempty searches against its columns.
+      filterFunction={(_item: KubeObject, search?: string) => !search}
       defaultSortingColumn={{ id: 'name', desc: false }}
       enableRowActions={false}
       enableRowSelection={false}
@@ -484,7 +503,7 @@ export function ManagedResources({
   title = 'Managed Resources',
 }: ManagedResourcesProps) {
   const applied = React.useMemo(() => getAppliedObjectsForTable(item), [item]);
-  const resources = useFetchedResources(applied);
+  const resources = useFetchedResources(applied, item?.cluster);
   const [selected, setSelected] = React.useState<any>(null);
   const [fetchedObject, setFetchedObject] = React.useState<any>(null);
   const [managedFields, setManagedFields] = React.useState<ManagedFieldSelection[]>([]);

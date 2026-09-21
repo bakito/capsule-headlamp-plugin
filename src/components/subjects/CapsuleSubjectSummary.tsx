@@ -3,29 +3,31 @@ import { Link, SimpleTable } from '@kinvolk/headlamp-plugin/lib/CommonComponents
 import { Alert, Box, Chip, CircularProgress, Stack, Typography } from '@mui/material';
 import { useMemo } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
-import { BreakRequest } from '../../resources/breakRequests';
 import { CAPSULE_CRDS } from '../../resources/capsuleCustomResources';
 import { GlobalProxySettings } from '../../resources/globalProxySettings';
+import { ResourcePermit } from '../../resources/resourcePermits';
 import { TenantOwner } from '../../resources/tenantOwners';
 import { Tenants } from '../../resources/tenants';
-import { BreakRequestExpireButton } from '../break-the-glass/BreakRequestExpireAction';
-import { breakRequestNamespacesFromSearch } from '../break-the-glass/breakRequestHelpers';
-import { BreakRequestPhaseChip } from '../break-the-glass/BreakRequestPhaseChip';
-import { BreakRequestReviewButton } from '../break-the-glass/BreakRequestReviewActivity';
 import { AnchoredSectionBox as SectionBox } from '../common/AnchoredSectionBox';
 import { CapsuleResourceLink } from '../common/CapsuleResourceLink';
 import { StatCard } from '../common/StatCard';
 import { SummaryCardGrid } from '../common/SummaryCardGrid';
 import { globalProxyReadyCondition } from '../proxy/globalProxySettingsHelpers';
+import { ResourcePermitExpireButton } from '../resource-permits/ResourcePermitExpireAction';
+import { resourcePermitNamespacesFromSearch } from '../resource-permits/resourcePermitHelpers';
+import { ResourcePermitPhaseChip } from '../resource-permits/ResourcePermitPhaseChip';
+import { ResourcePermitRetryButton } from '../resource-permits/ResourcePermitRetryAction';
+import { ResourcePermitReviewButton } from '../resource-permits/ResourcePermitReviewActivity';
 import { tenantOwnerReportedTenantNames } from '../tenant-owners/tenantOwnerReferences';
 import {
   bindingMentionsSubject,
-  breakRequestSubjectMentions,
   type CapsuleSubject,
   capsuleSubjectLabel,
   globalProxySettingsSubjectMentions,
   normalizeCapsuleSubject,
+  resourcePermitSubjectMentions,
   tenantOwnerMentionsSubject,
+  tenantPromotionsForSubject,
   tenantSubjectMentions,
 } from './subjectReferences';
 
@@ -65,7 +67,7 @@ export function CapsuleSubjectSummary(props: CapsuleSubjectSummaryProps = {}) {
     name: props.name || decoded(params.subject) || 'Unknown',
   };
   const namespaces = useMemo(
-    () => props.namespaces ?? breakRequestNamespacesFromSearch(location.search),
+    () => props.namespaces ?? resourcePermitNamespacesFromSearch(location.search),
     [location.search, props.namespaces]
   );
   const namespaceScope = namespaces.length > 0 ? namespaces : undefined;
@@ -77,7 +79,7 @@ export function CapsuleSubjectSummary(props: CapsuleSubjectSummaryProps = {}) {
   });
   const [clusterRoleBindings, clusterRoleBindingsError] =
     K8s.ResourceClasses.ClusterRoleBinding.useList();
-  const [breakRequests, breakRequestsError] = BreakRequest.useList({
+  const [resourcePermits, resourcePermitsError] = ResourcePermit.useList({
     namespace: namespaceScope,
   });
 
@@ -87,6 +89,20 @@ export function CapsuleSubjectSummary(props: CapsuleSubjectSummaryProps = {}) {
         .map(item => ({ item, mentions: tenantSubjectMentions(item, subject) }))
         .filter(row => row.mentions.length > 0)
         .sort((left, right) => left.item.getName().localeCompare(right.item.getName())),
+    [subject, tenants]
+  );
+  const promotionRows = useMemo(
+    () =>
+      (tenants || [])
+        .flatMap(item =>
+          tenantPromotionsForSubject(item, subject).map(promotion => ({ item, promotion }))
+        )
+        .sort(
+          (left, right) =>
+            left.item.getName().localeCompare(right.item.getName()) ||
+            left.promotion.namespace.localeCompare(right.promotion.namespace) ||
+            left.promotion.name.localeCompare(right.promotion.name)
+        ),
     [subject, tenants]
   );
   const bindingRows = useMemo(
@@ -110,8 +126,8 @@ export function CapsuleSubjectSummary(props: CapsuleSubjectSummaryProps = {}) {
   );
   const requestRows = useMemo(
     () =>
-      (breakRequests || [])
-        .map(item => ({ item, mentions: breakRequestSubjectMentions(item, subject) }))
+      (resourcePermits || [])
+        .map(item => ({ item, mentions: resourcePermitSubjectMentions(item, subject) }))
         .filter(row => row.mentions.length > 0)
         .sort(
           (left, right) =>
@@ -119,7 +135,7 @@ export function CapsuleSubjectSummary(props: CapsuleSubjectSummaryProps = {}) {
               String(right.item.getNamespace() || '')
             ) || left.item.getName().localeCompare(right.item.getName())
         ),
-    [breakRequests, subject]
+    [resourcePermits, subject]
   );
   const tenantOwnerRows = useMemo(
     () =>
@@ -159,7 +175,7 @@ export function CapsuleSubjectSummary(props: CapsuleSubjectSummaryProps = {}) {
     (!tenants && !tenantsError) ||
     (!tenantOwners && !tenantOwnersError) ||
     (!globalProxySettings && !globalProxySettingsError) ||
-    (!breakRequests && !breakRequestsError) ||
+    (!resourcePermits && !resourcePermitsError) ||
     (!roleBindings && !roleBindingsError) ||
     (!clusterRoleBindings && !clusterRoleBindingsError);
 
@@ -200,7 +216,7 @@ export function CapsuleSubjectSummary(props: CapsuleSubjectSummaryProps = {}) {
         />
         <StatCard
           label="BREAK REQUESTS"
-          total={breakRequestsError ? 'Unavailable' : requestRows.length}
+          total={resourcePermitsError ? 'Unavailable' : requestRows.length}
           segments={[{ name: 'Requests', value: requestRows.length, color: '#ed6c02' }]}
           chips={[{ label: `${requestRows.length} Visible`, color: 'warning' }]}
           footer={
@@ -241,9 +257,9 @@ export function CapsuleSubjectSummary(props: CapsuleSubjectSummaryProps = {}) {
           signed-in account is allowed to list.
         </Alert>
       )}
-      {breakRequestsError && (
+      {resourcePermitsError && (
         <Alert severity="info" sx={{ mb: 1.5 }}>
-          BreakRequests are unavailable in {scopedDescription}. Kubernetes only returns references
+          ResourcePermits are unavailable in {scopedDescription}. Kubernetes only returns references
           this signed-in account is allowed to list.
         </Alert>
       )}
@@ -290,6 +306,64 @@ export function CapsuleSubjectSummary(props: CapsuleSubjectSummaryProps = {}) {
             ]}
             data={tenantRows}
             emptyMessage="No visible Tenant mentions this subject."
+            reflectInURL={false}
+          />
+        </SectionBox>
+      )}
+
+      {promotionRows.length > 0 && (
+        <SectionBox title="Promotions">
+          <SimpleTable
+            columns={[
+              {
+                label: 'Tenant',
+                getter: (row: (typeof promotionRows)[number]) => (
+                  <CapsuleResourceLink crd={CAPSULE_CRDS.Tenant} name={row.item.getName()}>
+                    {row.item.getName()}
+                  </CapsuleResourceLink>
+                ),
+              },
+              {
+                label: 'Namespace',
+                getter: (row: (typeof promotionRows)[number]) => (
+                  <Link
+                    routeName="namespace"
+                    params={{ name: row.promotion.namespace }}
+                    activeCluster={row.item.cluster}
+                  >
+                    {row.promotion.namespace}
+                  </Link>
+                ),
+              },
+              {
+                label: 'Cluster Roles',
+                getter: (row: (typeof promotionRows)[number]) =>
+                  row.promotion.clusterRoles.length > 0 ? (
+                    <Stack direction="row" flexWrap="wrap" gap={0.5}>
+                      {row.promotion.clusterRoles.map(role => (
+                        <Chip key={role} size="small" label={role} variant="outlined" />
+                      ))}
+                    </Stack>
+                  ) : (
+                    '—'
+                  ),
+              },
+              {
+                label: 'Targets',
+                getter: (row: (typeof promotionRows)[number]) =>
+                  row.promotion.targets.length > 0 ? (
+                    <Stack direction="row" flexWrap="wrap" gap={0.5}>
+                      {row.promotion.targets.map(target => (
+                        <Chip key={target} size="small" label={target} color="primary" />
+                      ))}
+                    </Stack>
+                  ) : (
+                    'All Tenant namespaces'
+                  ),
+              },
+            ]}
+            data={promotionRows}
+            emptyMessage=""
             reflectInURL={false}
           />
         </SectionBox>
@@ -342,14 +416,14 @@ export function CapsuleSubjectSummary(props: CapsuleSubjectSummaryProps = {}) {
       )}
 
       {requestRows.length > 0 && (
-        <SectionBox title="Break Requests">
+        <SectionBox title="Resource Permits">
           <SimpleTable
             columns={[
               {
                 label: 'Request',
                 getter: (row: (typeof requestRows)[number]) => (
                   <CapsuleResourceLink
-                    crd={CAPSULE_CRDS.BreakRequest}
+                    crd={CAPSULE_CRDS.ResourcePermit}
                     name={row.item.getName()}
                     namespace={row.item.getNamespace()}
                   >
@@ -364,7 +438,7 @@ export function CapsuleSubjectSummary(props: CapsuleSubjectSummaryProps = {}) {
               {
                 label: 'Phase',
                 getter: (row: (typeof requestRows)[number]) => (
-                  <BreakRequestPhaseChip item={row.item} />
+                  <ResourcePermitPhaseChip item={row.item} />
                 ),
               },
               {
@@ -380,18 +454,24 @@ export function CapsuleSubjectSummary(props: CapsuleSubjectSummaryProps = {}) {
               {
                 label: 'Review',
                 getter: (row: (typeof requestRows)[number]) => (
-                  <BreakRequestReviewButton item={row.item} />
+                  <ResourcePermitReviewButton item={row.item} />
+                ),
+              },
+              {
+                label: 'Retry',
+                getter: (row: (typeof requestRows)[number]) => (
+                  <ResourcePermitRetryButton item={row.item} />
                 ),
               },
               {
                 label: 'Expire',
                 getter: (row: (typeof requestRows)[number]) => (
-                  <BreakRequestExpireButton item={row.item} />
+                  <ResourcePermitExpireButton item={row.item} />
                 ),
               },
             ]}
             data={requestRows}
-            emptyMessage="No visible BreakRequest mentions this subject."
+            emptyMessage="No visible ResourcePermit mentions this subject."
             reflectInURL={false}
           />
         </SectionBox>

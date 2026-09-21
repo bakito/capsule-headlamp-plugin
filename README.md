@@ -76,7 +76,7 @@ can explicitly override either default.
 
 You can enrich how Capsule resources appear in the plugin with `info.projectcapsule.dev`
 annotations. Tags work on every supported Capsule resource. Icon and description catalog
-metadata works for `Tenant`, `BreakRequestTemplate`, and `GlobalBreakRequestTemplate`; links and
+metadata works for `Tenant`, `ResourcePermitTemplate`, and `GlobalResourcePermitTemplate`; links and
 banners remain Tenant-specific.
 
 | Annotation                            | Applies to                      | Purpose                                      | Example Value                                                                   |
@@ -132,21 +132,32 @@ does not mean “all Tenants.”
 > `favicon` value. The icon appears with that link in Tenant lists, details, and
 > the selected Tenant context bar.
 
-### BreakRequest template catalog metadata
+### ResourcePermit template catalog metadata
 
-Both namespaced `BreakRequestTemplate` and cluster-scoped `GlobalBreakRequestTemplate` use the
+Open **Tenants → Permits** for Requests and Templates. New requests use a generated
+name prefix by default, accept an optional Reason, and open their detail page
+immediately after creation. Reviews highlight archive retention or immediate
+deletion after expiry. Denied details retain the future Archiving marker even
+when the controller has not yet reported a deletion date.
+
+This UI uses Capsule's `capsule.clastix.io/v1beta2` ResourcePermit APIs:
+`resourcepermits`, `resourcepermittemplates`, and `globalresourcepermittemplates`.
+Install the matching CRDs and update applicable Capsule Proxy policies when
+upgrading the backend. CLI snippets use `kubectl capsule resource-permit`.
+
+Both namespaced `ResourcePermitTemplate` and cluster-scoped `GlobalResourcePermitTemplate` use the
 same icon and description annotations as Tenants. The plugin shows them in template tables,
-template details, and the first step of the New BreakRequest flow. That flow combines readable
+template details, and the first step of the New ResourcePermit flow. That flow combines readable
 local and global templates, provides free-text search and a multi-select tag filter, and requires
 every selected tag to match. Template cards are grouped by the first declared tag, while remaining
 tags remain filterable. Templates without tags appear under **Uncategorized**. Templates also
 support the shared tags annotation. In both Setup and Template Parameters, **View YAML** optionally
-opens the exact current BreakRequest manifest in an application dialog where it can be copied or
+opens the exact current ResourcePermit manifest in an application dialog where it can be copied or
 downloaded without creating the request:
 
 ```yaml
 apiVersion: capsule.clastix.io/v1beta2
-kind: BreakRequestTemplate
+kind: ResourcePermitTemplate
 metadata:
   name: production-diagnostics
   namespace: solar-prod
@@ -179,6 +190,27 @@ spec:
 
 Icon values may be Iconify names, Font Awesome classes, or safe HTTP(S)/relative image URLs,
 using the same formats described above for Tenant icons.
+
+### EventHub
+
+The Capsule bell in Headlamp's top bar opens the live, user-specific **EventHub**. It resolves the
+signed-in Kubernetes username and groups with `SelfSubjectReview`. Requestors receive only
+`Active`, `Approved`, `Denied`, and `Expired` transitions for their own ResourcePermits. Explicitly
+configured manual reviewers receive only the `Requested` transition. Each entry includes its
+message, actor, occurrence time, and a link to the request; an actionable review request also
+offers the existing right-side **Review** activity.
+
+Only the latest appended transition for each ResourcePermit is considered. The relative-timeframe
+selector at the top filters both audiences to the last hour, 24 hours, 7 days, 30 days, or all
+time. The default is 24 hours. The adjacent event-type selector shows all events, only **Action
+required** reviewer requests, or only **Informational** requestor transitions. Actor identities
+link to the corresponding Subject activity.
+
+The EventHub first lists ResourcePermits across all Namespaces permitted by Headlamp, independently
+of the page's current Namespace filter, so reviewers do not miss actionable requests outside the
+selected scope. If that all-Namespaces request is forbidden, it falls back to the active Namespace
+filter or the Permits `?namespace=` query for restricted Tenant users. RBAC and list failures are
+displayed in the feed instead of being presented as an empty result.
 
 #### Kubernetes resource form fields
 
@@ -236,7 +268,7 @@ the JSON Schema form and Ajv 2020 validator. `x-kubernetes-validations` is retai
 server-side keyword; admission validation errors are displayed if Kubernetes rejects the request.
 
 For namespaced GVKs, `source.namespace` may be `request`, `*`, or a literal Namespace. Omitting it
-uses the BreakRequest Namespace; cluster-scoped GVKs are always listed at cluster scope. Optional
+uses the ResourcePermit Namespace; cluster-scoped GVKs are always listed at cluster scope. Optional
 `labelSelector` and `fieldSelector` values are forwarded to Kubernetes. Both option templates
 default to `{{ .metadata.name }}` and may combine static text with safe object paths, for example
 `{{ .metadata.name }} ({{ .metadata.namespace }})`. Discovery and list failures—including RBAC

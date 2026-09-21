@@ -1,4 +1,12 @@
-import type { BreakRequestAccessEntity } from '../../resources/breakRequests';
+import type { ResourcePermitAccessEntity } from '../../resources/resourcePermits';
+import {
+  resourcePermitStatusRequest,
+  resourcePermitTransitions,
+} from '../resource-permits/resourcePermitHelpers';
+import {
+  type PromotedServiceAccount,
+  tenantPromotedServiceAccounts,
+} from '../tenants/tenantStatusHelpers';
 
 export interface CapsuleSubject {
   kind: string;
@@ -54,7 +62,7 @@ export function normalizeCapsuleSubject(subject: {
 }
 
 export function capsuleSubjectFromAccessEntity(
-  entity?: BreakRequestAccessEntity
+  entity?: ResourcePermitAccessEntity
 ): CapsuleSubject | undefined {
   if (!entity) return undefined;
   return normalizeCapsuleSubject({ kind: entity.type, name: entity.name });
@@ -98,7 +106,7 @@ export function capsuleSubjectsEqual(
 }
 
 function accessEntityMentionsSubject(
-  entity: BreakRequestAccessEntity | undefined,
+  entity: ResourcePermitAccessEntity | undefined,
   subject: CapsuleSubject
 ): boolean {
   if (capsuleSubjectsEqual(capsuleSubjectFromAccessEntity(entity), subject)) return true;
@@ -121,6 +129,25 @@ export function tenantSubjectMentions(tenant: any, subject: CapsuleSubject): str
     }
   }
   return [...mentions];
+}
+
+/** Status-reported Tenant promotions for one exact ServiceAccount identity. */
+export function tenantPromotionsForSubject(
+  tenant: any,
+  subject: CapsuleSubject
+): PromotedServiceAccount[] {
+  if (subject.kind !== 'ServiceAccount') return [];
+
+  return tenantPromotedServiceAccounts(tenant).filter(promotion =>
+    capsuleSubjectsEqual(
+      {
+        kind: 'ServiceAccount',
+        name: promotion.name,
+        namespace: promotion.namespace,
+      },
+      subject
+    )
+  );
 }
 
 /** Whether a TenantOwner object is defined for the selected identity. */
@@ -170,17 +197,28 @@ export function globalProxySettingsSubjectMentions(
   return [...mentions];
 }
 
-/** Every place where a BreakRequest refers to the selected subject. */
-export function breakRequestSubjectMentions(request: any, subject: CapsuleSubject): string[] {
+/** Every place where a ResourcePermit refers to the selected subject. */
+export function resourcePermitSubjectMentions(request: any, subject: CapsuleSubject): string[] {
   const data = objectData(request);
   const mentions = new Set<string>();
-  if (accessEntityMentionsSubject(data.spec?.requestor, subject)) mentions.add('Requestor');
+  const isRequestor = accessEntityMentionsSubject(data.spec?.requestor, subject);
+  if (isRequestor) mentions.add('Requestor');
   if (accessEntityMentionsSubject(data.status?.review?.reviewer, subject)) mentions.add('Reviewer');
 
-  const serviceAccount = capsuleSubjectFromServiceAccountReference(data.status?.serviceAccount);
+  for (const transition of resourcePermitTransitions(data)) {
+    if (!capsuleSubjectsEqual(normalizeCapsuleSubject(transition.actor), subject)) continue;
+    if (transition.type === 'Approved' || transition.type === 'Denied') {
+      mentions.add('Reviewer');
+    } else if (!isRequestor || (transition.type !== 'Created' && transition.type !== 'Requested')) {
+      mentions.add(`${transition.type} actor`);
+    }
+  }
+
+  const statusRequest = resourcePermitStatusRequest(data);
+  const serviceAccount = capsuleSubjectFromServiceAccountReference(statusRequest?.impersonation);
   if (capsuleSubjectsEqual(serviceAccount, subject)) mentions.add('Execution ServiceAccount');
 
-  for (const resource of data.status?.approved?.resources || data.status?.resources || []) {
+  for (const resource of statusRequest?.resources || []) {
     for (const target of resource.targets || []) {
       if (manifestSubjects(target).some(candidate => capsuleSubjectsEqual(candidate, subject))) {
         mentions.add(`Rendered ${target.kind || 'resource'} subject`);

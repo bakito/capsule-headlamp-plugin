@@ -3,6 +3,7 @@ import {
   getAppliedCount,
   getAppliedObjectsForTable,
   getDefinedReplicationEntries,
+  getManagedObjectReadyStatus,
   getManagedObjectStatusMessage,
   getPlural,
   getReplicationDependencies,
@@ -77,6 +78,68 @@ describe('tenantResources helpers', () => {
   });
 
   describe('getAppliedObjectsForTable', () => {
+    it('retains nested processed-item state when the live object is unavailable', () => {
+      const [descriptor] = getAppliedObjectsForTable({
+        jsonData: {
+          status: {
+            processedItems: [
+              {
+                group: 'rbac.authorization.k8s.io',
+                version: 'v1',
+                kind: 'ClusterRoleBinding',
+                name: 'permit-access',
+                namespace: 'solar-test',
+                status: {
+                  clusterScoped: true,
+                  status: 'False',
+                  type: 'Ready',
+                  message: 'Apply denied',
+                },
+              },
+            ],
+          },
+        },
+      });
+      expect(descriptor.namespace).toBeUndefined();
+      expect(getManagedObjectReadyStatus(descriptor, [descriptor])).toEqual({
+        label: 'False',
+        color: 'error',
+      });
+      const live = {
+        apiVersion: descriptor.apiVersion,
+        kind: descriptor.kind,
+        metadata: { name: descriptor.name },
+      };
+      expect(getManagedObjectReadyStatus(live, [descriptor])).toEqual({
+        label: 'False',
+        color: 'error',
+      });
+      expect(getManagedObjectStatusMessage(live, [descriptor])).toBe('Apply denied');
+    });
+
+    it('does not resurrect legacy inventory after processed items have been pruned', () => {
+      expect(
+        getAppliedObjectsForTable({ status: { processedItems: [], resources: [{ name: 'old' }] } })
+      ).toEqual([]);
+    });
+
+    it('keeps Unknown state and missing processed-item conditions distinct from False', () => {
+      const live = {
+        kind: 'Pod',
+        metadata: { name: 'pending' },
+        status: { conditions: [{ type: 'Ready', status: 'Unknown' }] },
+      };
+      expect(getManagedObjectReadyStatus(live, [])).toEqual({ label: 'Unknown', color: 'default' });
+      const [descriptor] = getAppliedObjectsForTable({
+        status: {
+          processedItems: [{ kind: 'ConfigMap', name: 'config', status: { created: true } }],
+        },
+      });
+      expect(getManagedObjectReadyStatus(descriptor, [descriptor])).toEqual({
+        label: 'Unknown',
+        color: 'default',
+      });
+    });
     it('returns empty array for falsy input', () => {
       expect(getAppliedObjectsForTable(null)).toEqual([]);
       expect(getAppliedObjectsForTable(undefined)).toEqual([]);

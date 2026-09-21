@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   bindingMentionsSubject,
-  breakRequestSubjectMentions,
   capsuleSubjectFromServiceAccountReference,
   capsuleSubjectLabel,
   globalProxySettingsSubjectMentions,
   manifestSubjects,
   normalizeCapsuleSubject,
+  resourcePermitSubjectMentions,
   tenantOwnerMentionsSubject,
+  tenantPromotionsForSubject,
   tenantSubjectMentions,
 } from './subjectReferences';
 
@@ -48,6 +49,58 @@ describe('Capsule subject references', () => {
         namespace: 'solar-prod',
       })
     ).toEqual(['Promoted identity']);
+  });
+
+  it('returns only status-reported promotions for the exact ServiceAccount', () => {
+    const tenant = {
+      spec: {
+        promotions: [
+          {
+            clusterRoles: ['spec-role'],
+            kind: 'ServiceAccount',
+            name: 'system:serviceaccount:solar-prod:deployer',
+          },
+        ],
+      },
+      status: {
+        owners: [
+          {
+            clusterRoles: ['owner-role'],
+            kind: 'ServiceAccount',
+            name: 'system:serviceaccount:solar-prod:deployer',
+          },
+        ],
+        promotions: [
+          {
+            clusterRoles: ['edit', 'view'],
+            kind: 'ServiceAccount',
+            name: 'system:serviceaccount:solar-prod:deployer',
+            targets: ['solar-prod', 'solar-test'],
+          },
+          {
+            kind: 'ServiceAccount',
+            name: 'system:serviceaccount:solar-test:deployer',
+          },
+        ],
+      },
+    };
+
+    expect(
+      tenantPromotionsForSubject(tenant, {
+        kind: 'ServiceAccount',
+        name: 'deployer',
+        namespace: 'solar-prod',
+      })
+    ).toEqual([
+      {
+        clusterRoles: ['edit', 'view'],
+        identity: 'system:serviceaccount:solar-prod:deployer',
+        name: 'deployer',
+        namespace: 'solar-prod',
+        targets: ['solar-prod', 'solar-test'],
+      },
+    ]);
+    expect(tenantPromotionsForSubject(tenant, { kind: 'User', name: 'deployer' })).toEqual([]);
   });
 
   it('matches a TenantOwner by its exact normalized identity', () => {
@@ -99,8 +152,8 @@ describe('Capsule subject references', () => {
       spec: { requestor: { groups: ['operators'], name: 'alice', type: 'User' } },
       status: {
         review: { reviewer: { name: 'bob', type: 'User' } },
-        serviceAccount: { namespace: 'solar-prod', name: 'temporary-access' },
-        approved: {
+        request: {
+          impersonation: { namespace: 'solar-prod', name: 'temporary-access' },
           resources: [
             {
               targets: [
@@ -112,26 +165,50 @@ describe('Capsule subject references', () => {
             },
           ],
         },
+        transitions: [
+          {
+            actor: { name: 'bob', type: 'User' },
+            reason: 'ApprovedByUser',
+            timestamp: '2026-09-02T08:00:00Z',
+            type: 'Approved',
+          },
+          {
+            actor: {
+              name: 'system:serviceaccount:capsule-system:capsule-controller',
+              type: 'ServiceAccount',
+            },
+            reason: 'ActivatedBySystem',
+            timestamp: '2026-09-02T08:00:01Z',
+            type: 'Active',
+          },
+        ],
       },
     };
 
-    expect(breakRequestSubjectMentions(request, { kind: 'User', name: 'alice' })).toEqual([
+    expect(resourcePermitSubjectMentions(request, { kind: 'User', name: 'alice' })).toEqual([
       'Requestor',
       'Rendered RoleBinding subject',
     ]);
-    expect(breakRequestSubjectMentions(request, { kind: 'Group', name: 'operators' })).toEqual([
+    expect(resourcePermitSubjectMentions(request, { kind: 'Group', name: 'operators' })).toEqual([
       'Requestor',
     ]);
-    expect(breakRequestSubjectMentions(request, { kind: 'User', name: 'bob' })).toEqual([
+    expect(resourcePermitSubjectMentions(request, { kind: 'User', name: 'bob' })).toEqual([
       'Reviewer',
     ]);
     expect(
-      breakRequestSubjectMentions(request, {
+      resourcePermitSubjectMentions(request, {
         kind: 'ServiceAccount',
         namespace: 'solar-prod',
         name: 'temporary-access',
       })
     ).toEqual(['Execution ServiceAccount']);
+    expect(
+      resourcePermitSubjectMentions(request, {
+        kind: 'ServiceAccount',
+        namespace: 'capsule-system',
+        name: 'capsule-controller',
+      })
+    ).toEqual(['Active actor']);
   });
 
   it('finds every GlobalProxySettings rule mentioning the normalized subject', () => {

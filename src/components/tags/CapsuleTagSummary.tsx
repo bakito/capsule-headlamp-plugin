@@ -2,16 +2,16 @@ import { ResourceListView } from '@kinvolk/headlamp-plugin/lib/CommonComponents'
 import { Alert, Box, Chip, CircularProgress, Stack, Typography } from '@mui/material';
 import { useMemo } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
-import {
-  BreakRequest,
-  BreakRequestTemplate,
-  GlobalBreakRequestTemplate,
-} from '../../resources/breakRequests';
 import { CapsuleConfiguration } from '../../resources/capsuleConfigurations';
 import { CAPSULE_CRDS } from '../../resources/capsuleCustomResources';
 import { CustomQuota, GlobalCustomQuota } from '../../resources/customQuotas';
 import { GlobalProxySettings } from '../../resources/globalProxySettings';
 import { GlobalResourceQuota } from '../../resources/globalResourceQuotas';
+import {
+  GlobalResourcePermitTemplate,
+  ResourcePermit,
+  ResourcePermitTemplate,
+} from '../../resources/resourcePermits';
 import { ResourcePool, ResourcePoolClaim } from '../../resources/resourcePools';
 import { TenantOwner } from '../../resources/tenantOwners';
 import { GlobalTenantResource, TenantResource } from '../../resources/tenantResources';
@@ -34,11 +34,11 @@ interface ResourceInventory {
 }
 
 const CAPSULE_CRD_BY_KIND: Record<string, string> = {
-  BreakRequest: CAPSULE_CRDS.BreakRequest,
-  BreakRequestTemplate: CAPSULE_CRDS.BreakRequestTemplate,
+  ResourcePermit: CAPSULE_CRDS.ResourcePermit,
+  ResourcePermitTemplate: CAPSULE_CRDS.ResourcePermitTemplate,
   CapsuleConfiguration: CAPSULE_CRDS.CapsuleConfiguration,
   CustomQuota: CAPSULE_CRDS.CustomQuota,
-  GlobalBreakRequestTemplate: CAPSULE_CRDS.GlobalBreakRequestTemplate,
+  GlobalResourcePermitTemplate: CAPSULE_CRDS.GlobalResourcePermitTemplate,
   GlobalCustomQuota: CAPSULE_CRDS.GlobalCustomQuota,
   GlobalProxySettings: CAPSULE_CRDS.GlobalProxySettings,
   GlobalResourceQuota: CAPSULE_CRDS.GlobalResourceQuota,
@@ -88,13 +88,15 @@ export function CapsuleTagSummary(props: CapsuleTagSummaryProps = {}) {
   );
   const namespaceScope = namespaces.length > 0 ? namespaces : undefined;
 
-  const [breakRequests, breakRequestsError] = BreakRequest.useList({ namespace: namespaceScope });
-  const [breakRequestTemplates, breakRequestTemplatesError] = BreakRequestTemplate.useList({
+  const [resourcePermits, resourcePermitsError] = ResourcePermit.useList({
+    namespace: namespaceScope,
+  });
+  const [resourcePermitTemplates, resourcePermitTemplatesError] = ResourcePermitTemplate.useList({
     namespace: namespaceScope,
   });
   const [capsuleConfigurations, capsuleConfigurationsError] = CapsuleConfiguration.useList();
   const [customQuotas, customQuotasError] = CustomQuota.useList({ namespace: namespaceScope });
-  const [templates, templatesError] = GlobalBreakRequestTemplate.useList();
+  const [templates, templatesError] = GlobalResourcePermitTemplate.useList();
   const [globalCustomQuotas, globalCustomQuotasError] = GlobalCustomQuota.useList();
   const [globalProxySettings, globalProxySettingsError] = GlobalProxySettings.useList();
   const [globalResourceQuotas, globalResourceQuotasError] = GlobalResourceQuota.useList();
@@ -111,14 +113,14 @@ export function CapsuleTagSummary(props: CapsuleTagSummaryProps = {}) {
 
   const inventories: ResourceInventory[] = [
     {
-      error: breakRequestsError,
-      items: breakRequests,
-      kind: 'BreakRequest',
+      error: resourcePermitsError,
+      items: resourcePermits,
+      kind: 'ResourcePermit',
     },
     {
-      error: breakRequestTemplatesError,
-      items: breakRequestTemplates,
-      kind: 'BreakRequestTemplate',
+      error: resourcePermitTemplatesError,
+      items: resourcePermitTemplates,
+      kind: 'ResourcePermitTemplate',
     },
     {
       error: capsuleConfigurationsError,
@@ -133,7 +135,7 @@ export function CapsuleTagSummary(props: CapsuleTagSummaryProps = {}) {
     {
       error: templatesError,
       items: templates,
-      kind: 'GlobalBreakRequestTemplate',
+      kind: 'GlobalResourcePermitTemplate',
     },
     {
       error: globalCustomQuotasError,

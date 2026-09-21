@@ -27,7 +27,9 @@ export function TenantResourcesList() {
         id="capsule-tenant-resources"
         title="Tenant Resources"
         resourceClass={TenantResource}
-        headerProps={anchoredResourceListHeaderProps('Tenant Resources')}
+        headerProps={anchoredResourceListHeaderProps('Tenant Resources', {
+          headerProps: { noNamespaceFilter: true },
+        })}
         enableRowActions
         actions={[
           {

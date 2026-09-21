@@ -18,13 +18,13 @@ export function getAppliedObjectsForTable(item: any): any[] {
   if (!item) return [];
   const j = item.jsonData || item;
   const status = j?.status || item?.status || {};
-  const processed = status.processedItems || [];
-  if (Array.isArray(processed) && processed.length > 0) {
+  const processed = status.processedItems;
+  if (Array.isArray(processed)) {
     return processed.map((p: any) => ({
       apiVersion: p.version ? (p.group ? `${p.group}/${p.version}` : p.version) : 'v1',
       kind: p.kind || 'Unknown',
       name: p.name,
-      namespace: p.namespace,
+      namespace: p.status?.clusterScoped ? undefined : p.namespace,
       lastUpdateTime: p.status?.lastApply,
       _processedItem: p,
     }));
@@ -151,7 +151,7 @@ export function hasReadyConditionTrue(obj: any): boolean {
 
 function findAppliedDescriptor(liveObj: any, appliedDescriptors: any[]): any | undefined {
   const liveData = liveObj?.jsonData || liveObj || {};
-  const liveMetadata = liveObj?.metadata || liveData.metadata || {};
+  const liveMetadata = liveObj?.metadata || liveData.metadata || liveData;
   const liveApiVersion = liveObj?.apiVersion || liveData.apiVersion || '';
   const liveKind = liveObj?.kind || liveData.kind || '';
 
@@ -304,14 +304,17 @@ export function getManagedObjectReadyStatus(
   if (status && Array.isArray(status.conditions)) {
     const hasReadyCond = status.conditions.some((c: any) => c && c.type === 'Ready');
     if (hasReadyCond) {
-      return { label: 'False', color: 'error' };
+      const ready = status.conditions.find((c: any) => c?.type === 'Ready');
+      return String(ready.status).toLowerCase() === 'false'
+        ? { label: 'False', color: 'error' }
+        : { label: 'Unknown', color: 'default' };
     }
   }
 
   const desc = findAppliedDescriptor(liveObj, appliedDescriptors);
 
   const p = desc?._processedItem;
-  const pStatus = p?.status?.status || p?.status;
+  const pStatus = typeof p?.status === 'object' ? p.status?.status : p?.status;
   if (pStatus !== null && pStatus !== undefined) {
     const label = String(pStatus);
     const lower = label.toLowerCase().trim();

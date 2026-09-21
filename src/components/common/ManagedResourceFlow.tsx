@@ -38,7 +38,7 @@ const DEPENDENCY_STEP_X = 295;
 const DEPENDENCY_STEP_Y = 108;
 
 const KIND_ICONS: Record<string, string> = {
-  BreakRequest: 'mdi:shield-key-outline',
+  ResourcePermit: 'mdi:shield-key-outline',
   ConfigMap: 'mdi:file-cog',
   CronJob: 'mdi:calendar-clock',
   DaemonSet: 'mdi:server-network',

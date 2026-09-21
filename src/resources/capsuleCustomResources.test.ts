@@ -29,8 +29,8 @@ describe('Capsule custom resource routes', () => {
     expect(capsuleCustomResourceDetailPath(CAPSULE_CRDS.GlobalResourceQuota)).toBe(
       '/customresources/globalresourcequotas.capsule.clastix.io/:namespace/:crName'
     );
-    expect(capsuleCustomResourceDetailPath(CAPSULE_CRDS.BreakRequest)).toBe(
-      '/customresources/breakrequests.capsule.clastix.io/:namespace/:crName'
+    expect(capsuleCustomResourceDetailPath(CAPSULE_CRDS.ResourcePermit)).toBe(
+      '/customresources/resourcepermits.capsule.clastix.io/:namespace/:crName'
     );
     expect(capsuleCustomResourceListPath(CAPSULE_CRDS.Tenant)).toBe(
       '/customresources/tenants.capsule.clastix.io'
@@ -47,14 +47,14 @@ describe('Capsule custom resource routes', () => {
     expect(capsuleCustomResourceListPath(CAPSULE_CRDS.CapsuleConfiguration)).toBe(
       '/customresources/capsuleconfigurations.capsule.clastix.io'
     );
-    expect(capsuleCustomResourceListPath(CAPSULE_CRDS.BreakRequest)).toBe(
-      '/customresources/breakrequests.capsule.clastix.io'
+    expect(capsuleCustomResourceListPath(CAPSULE_CRDS.ResourcePermit)).toBe(
+      '/customresources/resourcepermits.capsule.clastix.io'
     );
-    expect(capsuleCustomResourceListPath(CAPSULE_CRDS.BreakRequestTemplate)).toBe(
-      '/customresources/breakrequesttemplates.capsule.clastix.io'
+    expect(capsuleCustomResourceListPath(CAPSULE_CRDS.ResourcePermitTemplate)).toBe(
+      '/customresources/resourcepermittemplates.capsule.clastix.io'
     );
-    expect(capsuleCustomResourceListPath(CAPSULE_CRDS.GlobalBreakRequestTemplate)).toBe(
-      '/customresources/globalbreakrequesttemplates.capsule.clastix.io'
+    expect(capsuleCustomResourceListPath(CAPSULE_CRDS.GlobalResourcePermitTemplate)).toBe(
+      '/customresources/globalresourcepermittemplates.capsule.clastix.io'
     );
   });
 });

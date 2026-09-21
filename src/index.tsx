@@ -10,16 +10,6 @@ import {
   registerUIPanel,
 } from '@kinvolk/headlamp-plugin/lib';
 import { RESOURCE_DEFINITIONS } from '@kinvolk/headlamp-plugin/lib/CommonComponents';
-import { BreakRequestDetail } from './components/break-the-glass/BreakRequestDetail';
-import { BreakRequestExpireAction } from './components/break-the-glass/BreakRequestExpireAction';
-import { BreakRequestReviewAction } from './components/break-the-glass/BreakRequestHeaderActions';
-import { BreakRequestsList } from './components/break-the-glass/BreakRequestList';
-import { BreakRequestTemplatesList } from './components/break-the-glass/BreakRequestTemplateList';
-import {
-  BreakRequestTemplateDetail,
-  GlobalBreakRequestTemplateDetail,
-} from './components/break-the-glass/GlobalBreakRequestTemplateDetail';
-import { GlobalBreakRequestTemplatesList } from './components/break-the-glass/GlobalBreakRequestTemplateList';
 import {
   CapsuleCustomResourceDetail,
   type CapsuleCustomResourceDetailKind,
@@ -41,6 +31,7 @@ import {
 } from './components/common/ReconcileActions';
 import { CapsuleConfigurationDetail } from './components/configuration/CapsuleConfigurationDetail';
 import { CapsuleConfigurationList } from './components/configuration/CapsuleConfigurationList';
+import { CapsuleEventHub } from './components/event-hub/CapsuleEventHub';
 import { CapsuleMap } from './components/map/CapsuleMap';
 import { processNamespaceDetailsSections } from './components/namespaces/NamespaceDetailsIntegration';
 import { CapsuleOverview } from './components/overview/CapsuleOverview';
@@ -57,6 +48,17 @@ import { GlobalResourceQuotasList } from './components/quotas/GlobalResourceQuot
 import { ResourcePoolClaimDetail } from './components/quotas/ResourcePoolClaimDetail';
 import { ResourcePoolDetail } from './components/quotas/ResourcePoolDetail';
 import { ResourcePoolsList } from './components/quotas/ResourcePoolList';
+import {
+  GlobalResourcePermitTemplateDetail,
+  ResourcePermitTemplateDetail,
+} from './components/resource-permits/GlobalResourcePermitTemplateDetail';
+import { GlobalResourcePermitTemplatesList } from './components/resource-permits/GlobalResourcePermitTemplateList';
+import { ResourcePermitDetail } from './components/resource-permits/ResourcePermitDetail';
+import { ResourcePermitExpireAction } from './components/resource-permits/ResourcePermitExpireAction';
+import { ResourcePermitReviewAction } from './components/resource-permits/ResourcePermitHeaderActions';
+import { ResourcePermitsList } from './components/resource-permits/ResourcePermitList';
+import { ResourcePermitRetryAction } from './components/resource-permits/ResourcePermitRetryAction';
+import { ResourcePermitTemplatesList } from './components/resource-permits/ResourcePermitTemplateList';
 import { CapsuleSettings } from './components/settings/CapsuleSettings';
 import { processPersistentVolumeDetailsSections } from './components/storage/PersistentVolumeTenantIntegration';
 import { CapsuleSubjectSummary } from './components/subjects/CapsuleSubjectSummary';
@@ -77,11 +79,6 @@ import { TenantBox } from './components/tenants/TenantBox';
 import { TenantDetail } from './components/tenants/TenantDetail';
 import { TenantLinksBar } from './components/tenants/TenantLinksBar';
 import { TenantsList } from './components/tenants/TenantList';
-import {
-  BreakRequest,
-  BreakRequestTemplate,
-  GlobalBreakRequestTemplate,
-} from './resources/breakRequests';
 import { CapsuleConfiguration } from './resources/capsuleConfigurations';
 import {
   CAPSULE_CRDS,
@@ -91,6 +88,11 @@ import {
 import { CustomQuota, GlobalCustomQuota } from './resources/customQuotas';
 import { GlobalProxySettings } from './resources/globalProxySettings';
 import { GlobalResourceQuota } from './resources/globalResourceQuotas';
+import {
+  GlobalResourcePermitTemplate,
+  ResourcePermit,
+  ResourcePermitTemplate,
+} from './resources/resourcePermits';
 import { ResourcePool, ResourcePoolClaim } from './resources/resourcePools';
 import { TenantOwner } from './resources/tenantOwners';
 import { GlobalTenantResource, TenantResource } from './resources/tenantResources';
@@ -99,6 +101,7 @@ import { Tenants } from './resources/tenants';
 const TENANTS_MENU_ICON = 'mdi:account-group';
 
 registerAppBarAction(<TenantBox />);
+registerAppBarAction({ id: 'capsule-event-hub', action: <CapsuleEventHub /> });
 registerUIPanel({
   id: 'capsule-tenant-contexts',
   side: 'top',
@@ -118,14 +121,14 @@ const capsuleCustomResourceDetails: Array<{
   sidebar: string;
 }> = [
   {
-    crd: CAPSULE_CRDS.BreakRequest,
-    kind: 'BreakRequest',
-    sidebar: 'break-requests',
+    crd: CAPSULE_CRDS.ResourcePermit,
+    kind: 'ResourcePermit',
+    sidebar: 'resource-permits',
   },
   {
-    crd: CAPSULE_CRDS.BreakRequestTemplate,
-    kind: 'BreakRequestTemplate',
-    sidebar: 'break-request-templates',
+    crd: CAPSULE_CRDS.ResourcePermitTemplate,
+    kind: 'ResourcePermitTemplate',
+    sidebar: 'resource-permit-templates',
   },
   {
     crd: CAPSULE_CRDS.CapsuleConfiguration,
@@ -136,9 +139,9 @@ const capsuleCustomResourceDetails: Array<{
   { crd: CAPSULE_CRDS.TenantOwner, kind: 'TenantOwner', sidebar: 'tenant-owners' },
   { crd: CAPSULE_CRDS.CustomQuota, kind: 'CustomQuota', sidebar: 'custom-quotas' },
   {
-    crd: CAPSULE_CRDS.GlobalBreakRequestTemplate,
-    kind: 'GlobalBreakRequestTemplate',
-    sidebar: 'break-request-templates',
+    crd: CAPSULE_CRDS.GlobalResourcePermitTemplate,
+    kind: 'GlobalResourcePermitTemplate',
+    sidebar: 'resource-permit-templates',
   },
   {
     crd: CAPSULE_CRDS.GlobalCustomQuota,
@@ -208,7 +211,7 @@ registerRoute({
 registerSidebarEntry({
   parent: '',
   name: 'capsule',
-  label: 'Capsule',
+  label: 'Tenants',
   icon: TENANTS_MENU_ICON,
   url: '/capsule/overview/',
 });
@@ -311,26 +314,26 @@ registerSidebarEntry({
 
 registerSidebarEntry({
   parent: 'capsule',
-  name: 'capsule-break-the-glass-section',
-  label: 'Break the Glass',
+  name: 'capsule-permits-section',
+  label: 'Permits',
   icon: 'mdi:shield-key-outline',
-  url: capsuleCustomResourceListPath(CAPSULE_CRDS.BreakRequest),
+  url: capsuleCustomResourceListPath(CAPSULE_CRDS.ResourcePermit),
 });
 
 registerSidebarEntry({
-  parent: 'capsule-break-the-glass-section',
-  name: 'break-requests',
+  parent: 'capsule-permits-section',
+  name: 'resource-permits',
   label: 'Requests',
   icon: 'mdi:clipboard-text-clock-outline',
-  url: capsuleCustomResourceListPath(CAPSULE_CRDS.BreakRequest),
+  url: capsuleCustomResourceListPath(CAPSULE_CRDS.ResourcePermit),
 });
 
 registerSidebarEntry({
-  parent: 'capsule-break-the-glass-section',
-  name: 'break-request-templates',
+  parent: 'capsule-permits-section',
+  name: 'resource-permit-templates',
   label: 'Templates',
   icon: 'mdi:file-key-outline',
-  url: capsuleCustomResourceListPath(CAPSULE_CRDS.BreakRequestTemplate),
+  url: capsuleCustomResourceListPath(CAPSULE_CRDS.ResourcePermitTemplate),
 });
 
 registerSidebarEntry({
@@ -375,7 +378,7 @@ registerRoute({
 
 registerRoute({
   path: '/capsule/subjects/:kind/:subject',
-  sidebar: 'break-requests',
+  sidebar: 'resource-permits',
   name: 'capsule-subject',
   component: () => <CapsuleSubjectSummary />,
   exact: true,
@@ -536,50 +539,50 @@ registerRoute({
 });
 
 registerRoute({
-  path: '/capsule/break-requests/',
-  sidebar: 'break-requests',
-  name: 'breakrequests',
-  component: () => <BreakRequestsList />,
+  path: '/capsule/resource-permits/',
+  sidebar: 'resource-permits',
+  name: 'resourcepermits',
+  component: () => <ResourcePermitsList />,
   exact: true,
 });
 
 registerRoute({
-  path: '/capsule/break-requests/:namespace/:name',
-  sidebar: 'break-requests',
-  name: 'breakrequest',
-  component: () => <BreakRequestDetail />,
+  path: '/capsule/resource-permits/:namespace/:name',
+  sidebar: 'resource-permits',
+  name: 'resourcepermit',
+  component: () => <ResourcePermitDetail />,
   exact: true,
 });
 
 registerRoute({
-  path: '/capsule/break-request-templates/',
-  sidebar: 'break-request-templates',
-  name: 'breakrequesttemplates',
-  component: () => <BreakRequestTemplatesList />,
+  path: '/capsule/resource-permit-templates/',
+  sidebar: 'resource-permit-templates',
+  name: 'resourcepermittemplates',
+  component: () => <ResourcePermitTemplatesList />,
   exact: true,
 });
 
 registerRoute({
-  path: '/capsule/break-request-templates/:namespace/:name',
-  sidebar: 'break-request-templates',
-  name: 'breakrequesttemplate',
-  component: () => <BreakRequestTemplateDetail />,
+  path: '/capsule/resource-permit-templates/:namespace/:name',
+  sidebar: 'resource-permit-templates',
+  name: 'resourcepermittemplate',
+  component: () => <ResourcePermitTemplateDetail />,
   exact: true,
 });
 
 registerRoute({
-  path: '/capsule/global-break-request-templates/',
-  sidebar: 'break-request-templates',
-  name: 'globalbreakrequesttemplates',
-  component: () => <GlobalBreakRequestTemplatesList />,
+  path: '/capsule/global-resource-permit-templates/',
+  sidebar: 'resource-permit-templates',
+  name: 'globalresourcepermittemplates',
+  component: () => <GlobalResourcePermitTemplatesList />,
   exact: true,
 });
 
 registerRoute({
-  path: '/capsule/global-break-request-templates/:name',
-  sidebar: 'break-request-templates',
-  name: 'globalbreakrequesttemplate',
-  component: () => <GlobalBreakRequestTemplateDetail />,
+  path: '/capsule/global-resource-permit-templates/:name',
+  sidebar: 'resource-permit-templates',
+  name: 'globalresourcepermittemplate',
+  component: () => <GlobalResourcePermitTemplateDetail />,
   exact: true,
 });
 
@@ -609,8 +612,9 @@ registerRoute({
 
 registerDetailsViewHeaderAction(NamespaceCordonAction);
 registerDetailsViewHeaderAction(ServiceAccountPromotionAction);
-registerDetailsViewHeaderAction(BreakRequestReviewAction);
-registerDetailsViewHeaderAction(BreakRequestExpireAction);
+registerDetailsViewHeaderAction(ResourcePermitReviewAction);
+registerDetailsViewHeaderAction(ResourcePermitRetryAction);
+registerDetailsViewHeaderAction(ResourcePermitExpireAction);
 
 registerDetailsViewHeaderActionsProcessor({
   id: 'capsule.documentation-action',
@@ -646,11 +650,11 @@ registerDetailsViewHeaderAction(GlobalTenantResourceReconcileAction);
   class: Tenants,
   form: CreateTenantForm,
 };
-(RESOURCE_DEFINITIONS as any).BreakRequest = {
-  class: BreakRequest,
+(RESOURCE_DEFINITIONS as any).ResourcePermit = {
+  class: ResourcePermit,
 };
-(RESOURCE_DEFINITIONS as any).BreakRequestTemplate = {
-  class: BreakRequestTemplate,
+(RESOURCE_DEFINITIONS as any).ResourcePermitTemplate = {
+  class: ResourcePermitTemplate,
 };
 (RESOURCE_DEFINITIONS as any).CapsuleConfiguration = {
   class: CapsuleConfiguration,
@@ -662,8 +666,8 @@ registerDetailsViewHeaderAction(GlobalTenantResourceReconcileAction);
   class: GlobalCustomQuota,
   form: CreateGlobalCustomQuotaForm,
 };
-(RESOURCE_DEFINITIONS as any).GlobalBreakRequestTemplate = {
-  class: GlobalBreakRequestTemplate,
+(RESOURCE_DEFINITIONS as any).GlobalResourcePermitTemplate = {
+  class: GlobalResourcePermitTemplate,
 };
 (RESOURCE_DEFINITIONS as any).CustomQuota = {
   class: CustomQuota,

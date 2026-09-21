@@ -146,12 +146,13 @@ replace it with API- and verb-scoped roles there.
 ## Overview dashboard
 
 - `src/components/overview/CapsuleOverview.tsx` renders four semantic summary
-  rows: Tenant (3 cards), Quotas (4 cards), Replications (3 cards), and Proxy
-  (1 card).
-- The eleven dedicated panels are Tenants, Managed Namespaces, Tenant Owners,
+  rows: Tenant (3 cards), Quotas (4 cards), Replications (3 cards), and a split
+  Permits/Proxy row (1 card each). Permits summarizes ResourcePermit lifecycle in
+  the selected Namespace scope and preserves that scope when opened.
+- The twelve dedicated panels are Tenants, Managed Namespaces, Tenant Owners,
   Resource Pools, Custom Quotas, Global Custom Quotas, Global Resource Quotas,
   Tenant Resources, Global Tenant Resources, Managed Resources, and Global
-  Proxy Settings.
+  Proxy Settings, plus Resource Permits.
 - `src/components/overview/overviewStats.ts` contains the tested readiness,
   quota-health, and ResourcePool aggregation logic.
 - `src/resources/resourcePools.ts` models both cluster-scoped ResourcePools and
@@ -185,7 +186,7 @@ replace it with API- and verb-scoped roles there.
 - Managed-resource `Unknown` status is a separate gray segment and must not be
   counted as Ready.
 - Overview `StatCard`s are fully keyboard-accessible, cluster-aware links when
-  `routeName` is provided. All eleven overview cards navigate to their dedicated
+  `routeName` is provided. All twelve overview cards navigate to their dedicated
   plugin page, the Kubernetes Namespaces page, an appropriate generic custom
   resource list, or the all-sources tenant-grouped map for Managed Resources.
 - The overview no longer renders the duplicate recent-Tenants table or its
@@ -407,8 +408,8 @@ SCOPE`. The namespaced view counts unique CustomQuota namespaces; the global
   `/customresources/:crd/:namespace/:crName`; cluster-scoped objects use `-` for
   the namespace segment.
 - `src/components/common/CapsuleCustomResourceDetail.tsx` is only an adapter. It
-  reuses the existing rich list/detail components for BreakRequest,
-  BreakRequestTemplate, GlobalBreakRequestTemplate, Tenant, TenantOwner, CustomQuota,
+  reuses the existing rich list/detail components for ResourcePermit,
+  ResourcePermitTemplate, GlobalResourcePermitTemplate, Tenant, TenantOwner, CustomQuota,
   GlobalCustomQuota, GlobalResourceQuota, GlobalProxySettings,
   CapsuleConfiguration, ResourcePool, TenantResource, and GlobalTenantResource.
   Do not create a second implementation for CRD routes.
@@ -464,7 +465,7 @@ SCOPE`. The namespaced view counts unique CustomQuota namespaces; the global
   Tenant selector, list, detail title, and selected-Tenant tabs. Keep **No
   Tenant Filter** and multi-Tenant
   aggregate indicators distinct because they represent scope rather than one
-  Tenant. The parent **Capsule** sidebar entry uses the same built-in account
+  Tenant. The parent **Tenants** sidebar entry uses the same built-in account
   group icon as the **Tenants** leaf. Nested **Tenant** / **Tenants** menu
   entries intentionally retain their resource-oriented account icons; the
   Capsule mark is the fallback for each Tenant object, not a menu-category
@@ -558,49 +559,104 @@ links configured` filler. An empty selection means **No Tenant Filter** and
 - The standalone `Cordoning` detail subsection was removed; the action remains
   in Headlamp's detail header and the current state remains in metadata and the
   graph.
-- Capsule navigation is grouped into nested `Tenant`, `Quotas`, `Replications`,
-  and `Break the Glass` sidebar sections. Keep route sidebar IDs attached to
-  their leaf entry so Headlamp expands the active subsection automatically.
+- The main Capsule sidebar entry is labeled **Tenants** and groups nested
+  `Tenant`, `Quotas`, `Replications`, and `Permits` sections. `Permits` contains
+  Requests and Templates. Keep route sidebar IDs attached to their leaf entry
+  so Headlamp expands the active subsection automatically.
 
-## Break the Glass
+## Permits / Resource Permits
 
-- The Capsule v1beta2 Break-the-Glass API consists of namespaced
-  `BreakRequest` and `BreakRequestTemplate` objects plus cluster-scoped
-  `GlobalBreakRequestTemplate` objects. Capsule navigation exposes **Requests**
-  and **Templates** under **Break the Glass**. The Templates leaf is a combined
+- The Capsule v1beta2 Resource Permit API consists of namespaced
+  `ResourcePermit` and `ResourcePermitTemplate` objects plus cluster-scoped
+  `GlobalResourcePermitTemplate` objects. Do not retain or query the retired
+  BreakRequest CRDs. The nested **Tenants → Permits** navigation group exposes
+  **Requests** and **Templates**. The Templates leaf is a combined
   catalog of readable namespaced and global templates with explicit Scope and
   Namespace Availability columns. Query both APIs independently: a denied or
   empty namespaced API must not suppress global results, and vice versa. Both
   kinds also retain their canonical rich list/detail routes. Keep Approvers out
   of template overview tables; approval subjects belong in the detail view.
-- `src/resources/breakRequests.ts` provides direct v1beta2 resource classes.
+- `src/resources/resourcePermits.ts` provides direct v1beta2 resource classes.
   The dedicated lists and details must use those API endpoints and must not
   depend on permission to read CustomResourceDefinitions. Their literal
   canonical routes and `/capsule/...` aliases reuse the same page components.
-- BreakRequest users commonly receive namespaced access through Tenant
-  RoleBindings without permission for a cluster-wide list. `BreakRequestList`
+  The API plurals are `resourcepermits`, `resourcepermittemplates`, and
+  `globalresourcepermittemplates`. The matching Capsule CRDs and proxy policies
+  must be migrated with the backend; do not fall back to retired lease APIs.
+- ResourcePermit users commonly receive namespaced access through Tenant
+  RoleBindings without permission for a cluster-wide list. `ResourcePermitList`
   therefore parses Headlamp's space-delimited `?namespace=` filter and passes
-  the explicit Namespace array to `BreakRequest.useList`; the table renders
+  the explicit Namespace array to `ResourcePermit.useList`; the table renders
   that same data instead of mounting a second unscoped resource-class query.
-  Do not restore a bare `BreakRequest.useList()` or a `ResourceListView`
+  Do not restore a bare `ResourcePermit.useList()` or a `ResourceListView`
   `resourceClass` fetch on this page, because either can call the all-Namespaces
   endpoint and return Forbidden for otherwise-authorized Tenant owners.
-- `BreakRequestDetail.tsx` keeps Conditions and Events first, then request
+  Dedicated overview inventories for namespaced Capsule resources do not show
+  Headlamp's table-header Namespace picker. Namespace scope continues to come
+  from the global Tenant/Namespace selection and remains visible in the table's
+  Namespace column.
+- `CapsuleEventHub.tsx` registers the Capsule bell in Headlamp's app bar. It is
+  deliberately ResourcePermit-only: do not add a broad Kubernetes Event watch or
+  actor-annotation contract. Resolve the signed-in username and groups with
+  `SelfSubjectReview`. For the exact `spec.requestor`, include only Active,
+  Approved, Denied, and Expired transitions. For an explicit manual
+  `status.request.approvals.approvers` User, Group, or ServiceAccount matching the
+  current username/groups, include only the Requested transition; automatic and
+  empty approval policies do not create reviewer events. Consider only the final
+  entry of the append-only `status.transitions` array for each ResourcePermit, so
+  stale lifecycle stages never remain as separate notifications. Transition
+  items link to the rich request page, actor identities link to their Subject
+  activity, and a Requested reviewer item opens the existing right-side Review
+  activity while the request remains reviewable. The top relative-timeframe
+  selector filters both audiences to 1 hour, 24 hours, 7 days, 30 days, or all
+  time, defaulting to 24 hours. The adjacent event-type selector offers All
+  events, Action required (reviewer), and Informational (requestor); do not
+  restore the Namespace-count chip.
+  The primary ResourcePermit watch is independent of the current page filter and
+  spans all Headlamp-permitted Namespaces, ensuring cluster-level reviewers see
+  actionable requests outside their selected scope. If that list is forbidden,
+  fall back to the active global Namespace set or the Catalog's space-delimited
+  `?namespace=` query for restricted Tenant users. Surface list/RBAC failures
+  only when neither query succeeds.
+- `ResourcePermitDetail.tsx` keeps Conditions and Events first, then request
   lifecycle, parameters, and the visual chronological audit timeline. Timeline
   stages use distinct filled/tinted colors for quick scanning. Timeline cards
-  identify how and by whom the request was created, reviewer identity, verdict,
-  review comment, and reported transition time; subject actors link to their
-  correlated summary page. Controller-authored stages resolve to the concrete
-  `status.serviceAccount` identity when reported, instead of leaving an
-  unlinked `Capsule controller` label. A **Review Verdict** summary renders only
-  after status contains an Approved or Denied verdict; the normal detail page
-  deliberately does not duplicate rendered approval resources.
+  consume the append-only `status.transitions` array in API order and display
+  each transition's own type, authenticated actor, reason, message, timestamp,
+  and optional Kubernetes event time. Never reconstruct lifecycle history from
+  metadata, `status.conditions`, review fields, or the execution identity;
+  conditions are operational state only. Transition actors link to their
+  correlated Subject activity. Planned lifecycle markers are separate from
+  `resourcePermitAuditTrail()`: an Approved request whose
+  `status.request.startTime` is still in the future and has no Active transition
+  shows scheduled **Active**, while `status.keepUntil` shows the future
+  retention/deletion milestone as **Archiving**. Their phase-colored dashed branch
+  also renders for Denied requests without `keepUntil`, showing the captured
+  retention policy and **Archive date not yet reported**. Do not invent a date
+  from the denial timestamp: the controller does not currently schedule deletion
+  on denial. `ResourcePermitRetention.tsx` shows the same yellow archive treatment
+  in the review form, using `status.request.keepFor` to distinguish retained
+  requests from immediate deletion after expiry. Missing review snapshots remain
+  explicitly unknown. The dashed branch
+  remains strictly vertical and connected to the left lifecycle spine. Center
+  every node and connector on the same 42px grid spine and stop the connector at
+  the destination node's top edge; it must not enter the node. A calendar
+  milestone is centered on that spine, with the filled **Future lifecycle**
+  label laid out horizontally beside it; do not add a horizontal connector.
+  Preserve the clear spacing break before the scheduled card. Archiving is a
+  presentation-only future milestone; it is not a ResourcePermit API phase or
+  transition.
+  Requested uses a neutral slate phase color, Pending retains its review-warning
+  orange, Expired uses deep orange, and Archiving uses yellow with a dark
+  accessible foreground. A **Review Verdict** summary renders only after
+  status or its matching Approved/Denied transition reports a completed verdict;
+  the normal detail page deliberately does not duplicate rendered resources.
   The Request and Parameters tables each use an explicit Expand/Collapse action
-  and start collapsed for every newly opened BreakRequest; Audit Trail and
+  and start collapsed for every newly opened ResourcePermit; Audit Trail and
   Review Verdict remain visible. ServiceAccount subject links include the
   request Namespace and the status-reported ServiceAccount Namespace so the
   correlated drawer can discover both access and execution-identity bindings.
-  Reviewable phases open `BreakRequestReviewActivity.tsx` as a temporary
+  Reviewable phases open `ResourcePermitReviewActivity.tsx` as a temporary
   right-side Headlamp tab from the list, detail, and Subject summary. The tab
   shows only the resulting per-target live object changes plus the required
   verdict/comment form; do not restore separate rendered-manifest or unrendered
@@ -609,39 +665,52 @@ links configured` filler. An empty selection means **No Tenant Filter** and
   change state. Live comparison projects the current object onto only
   manifest-owned fields so generated metadata and status are not shown as
   deletions.
-- `BreakRequestCLICommand.tsx` renders the copyable terminal alternative in the
-  Review drawer and Expire confirmation. Keep the commands derived from the
-  exact object identity: `kubectl capsule btg review <name> -n <namespace>` and
-  `kubectl capsule btg expire <name> -n <namespace>`. The review command remains
-  interactive so the CLI can present the snapshot and accept approve/deny plus
-  its optional timing flags; do not append transient web-form values.
-- `status.approved.resources` is the authoritative immutable review snapshot;
-  `status.resources` remains only a compatibility fallback for older objects.
-  Approval is disabled until `status.approved` exists, even when Ready=True,
+- `ResourcePermitCLICommand.tsx` renders the copyable terminal alternative in the
+  Review drawer and Retry/Expire confirmations. Keep the commands derived from
+  the exact object identity: `kubectl capsule resource-permit review|retry|expire <name> -n
+<namespace>`. The review command remains interactive so the CLI can present
+  the snapshot and accept approve/deny plus its optional timing flags; do not
+  append transient web-form values.
+- `status.request` is the authoritative controller-resolved review snapshot. It
+  owns the resolved template/version, execution `impersonation`, immutable
+  captured `approvals`, lifecycle values, retention, and rendered `resources`.
+  Detail and review surfaces must use this snapshot rather than reload mutable
+  template policy. `resourcePermitStatusRequest()` deliberately reads only the
+  current `status.request` contract. Approval
+  is disabled until `status.request` exists, even when Ready=True,
   while Decline remains available. Review submission merge-patches
-  `/status` with phase, verdict, and comment. Never send or infer a reviewer
-  identity in the browser: the admission webhook authenticates and records it.
-- BreakRequest lifecycle actions are first-class controls. Review and Expire
-  are separate detail-header actions and separate columns in the main and
-  Subject BreakRequest tables. Review opens its right-side activity; Expire
+  `/status` with the requested phase, optional comment, and optional timing
+  overrides. Never send or infer a reviewer, verdict, transition, approval
+  policy, rendered resource, or execution identity in the browser: admission
+  authenticates the actor and reconstructs those controller-owned fields.
+- ResourcePermit lifecycle actions are first-class controls. Review, Retry, and
+  Expire are separate detail-header actions and separate columns in the main and
+  Subject ResourcePermit tables. Review opens its right-side activity; Retry is
+  available only for Failed requests with `status.failure.retryPhase`, uses an
+  in-application confirmation, and patches only `status.phase: Retrying`.
+  The detail Failure section exposes stage, retry phase, reason, and message. Expire
   uses a themed in-application confirmation dialog for the irreversible
   revocation and patches only
   `status.phase: Expired` on `/status`. The admission webhook reconstructs the
   previous controller-owned status, and the Expire action is hidden once the
   terminal phase is reached.
 - Reviewers can adjust the effective Duration and Start time before approval.
-  Initialize both controls from `status.approved`, convert the API timestamp to
+  Initialize both controls from `status.request`, convert the API timestamp to
   and from the browser-local `datetime-local` value, and include only
-  `status.approved.duration/startTime` with the approval transition. A cleared
+  `status.request.duration/startTime` with the approval transition. A cleared
   Duration submits explicit `0s` so template defaults cannot replace the
   reviewer's intentional unlimited window; Start time remains required for an
   approval. Declines do not submit lifecycle overrides. Rendered resources,
   keep-for policy, resolved identity, and template identity remain
   controller-owned and must never be copied into the browser patch.
-- The BreakRequest list has a prominent **New BreakRequest** button that opens
-  `CreateBreakRequestActivity.tsx` on the right. Creation combines namespaced
-  `BreakRequestTemplate` objects from the selected Namespace scope with
-  `GlobalBreakRequestTemplate` objects reported as available there. Either API
+  A review comment is optional for approval and must not disable **Submit
+  approval**; omit `status.review.message` when it is blank. Declines continue
+  to require a non-empty comment so their reason remains visible in the audit
+  trail.
+- The ResourcePermit list has a prominent **New ResourcePermit** button that opens
+  `CreateResourcePermitActivity.tsx` on the right. Creation combines namespaced
+  `ResourcePermitTemplate` objects from the selected Namespace scope with
+  `GlobalResourcePermitTemplate` objects reported as available there. Either API
   may be forbidden without hiding templates returned by the other. The catalog
   has an AND-style multi-tag Autocomplete plus
   free-text search across template name, description, and tags; it must not
@@ -654,22 +723,23 @@ links configured` filler. An empty selection means **No Tenant Filter** and
   RJSF/MUI form with the Ajv 2020 validator. Preserve nested objects and arrays,
   composition branches, defaults, enums, and native schema constraints. The
   right-side form is a two-step
-  wizard: **Setup** collects formal request information, then **Template
-  Parameters** shows only schema-derived inputs. Users can submit an exact
-  metadata name or enable a generated name, which sends
-  `metadata.generateName` and links the API-returned concrete object. Bordered,
-  tinted panels and increased spacing separate the template, field groups, and
+  wizard: **Setup** collects formal request information with optional Reason,
+  then **Template Parameters** shows only schema-derived inputs. Users can submit an exact
+  metadata name or use generated naming, enabled by default, which sends
+  `metadata.generateName`. Success navigates directly to the API-returned
+  concrete object's canonical rich detail and closes only the creation activity.
+  Bordered, tinted panels and increased spacing separate the template, field groups, and
   final action. Both wizard steps expose an optional **View YAML** action. It
-  must serialize the same `buildCreateBreakRequest()` body used by Create into
+  must serialize the same `buildCreateResourcePermit()` body used by Create into
   an in-app preview with Copy and Download controls; previewing or exporting
   must not submit a request, and the requestor remains absent because admission
   injects it. An empty request Duration means unlimited access without an
   expiration timestamp; keep that explicit in the helper text and do not claim
   an empty value uses `spec.defaultDuration`. Create sends the direct namespaced
-  BreakRequest API payload without `spec.requestor`; admission must inject the
+  ResourcePermit API payload without `spec.requestor`; admission must inject the
   authenticated identity. Template list/get access remains an explicit
   prerequisite and gets its own diagnostic when denied.
-- `breakRequestJsonSchema.ts` recursively discovers `x-capsule-form` at the
+- `resourcePermitJsonSchema.ts` recursively discovers `x-capsule-form` at the
   schema root and under JSON Schema 2020-12 containment, composition,
   conditional, map, and local `$defs`/`definitions` reference paths. Local
   reference traversal must stop loops. A `kubernetes-resource` extension on a
@@ -683,9 +753,9 @@ links configured` filler. An empty selection means **No Tenant Filter** and
   `apiVersion`/`kind`, resolves the listable plural resource and namespaced
   scope, then lists options with the signed-in Headlamp identity. Honor
   `source.namespace` values `request`, `*`, and literal Namespaces plus both
-  label/field selectors. Omitted Namespace means the BreakRequest Namespace
+  label/field selectors. Omitted Namespace means the ResourcePermit Namespace
   for namespaced GVKs and cluster scope for cluster-scoped GVKs.
-  `breakRequestKubernetesResource.ts` owns discovery/list URL construction and
+  `resourcePermitKubernetesResource.ts` owns discovery/list URL construction and
   browser-safe option rendering. Label/value templates default to
   `{{ .metadata.name }}` and support static text with Go-template object-path
   substitutions; never evaluate arbitrary template functions in the browser.
@@ -697,10 +767,19 @@ links configured` filler. An empty selection means **No Tenant Filter** and
   XY flow, live inventory, and inline SSA inspection. Render it only once a
   request is Active or the controller reports processed items; pre-approval
   rendered resource groups are approval data rather than live inventory. On a
-  BreakRequest detail, pass `inventoryTitle={null}` so the searchable inventory
+  ResourcePermit, inventory membership comes from `status.processedItems` and its
+  nested `status.status`, `status.message`, and `status.clusterScoped`. Rows stay
+  visible while their live GET is pending or denied; successful watch updates
+  enrich existing rows and subscriptions are closed on unmount. Honor explicit
+  cluster scope even when the descriptor carries its replication Namespace.
+  The detail inventory must bypass Headlamp's global Namespace/Tenant filter:
+  a permit can manage targets outside its own Namespace or selected Tenant.
+  Keep the table's own text search and Namespace/Kind/Ready column filters active.
+  Empty processed items remain empty after pruning. On a ResourcePermit detail,
+  pass `inventoryTitle={null}` so the searchable inventory
   table follows the diagram directly without a redundant **Managed resource
   inventory** heading; TR/GTR pages retain their inventory heading.
-- `GlobalBreakRequestTemplateDetail.tsx` provides the shared rich detail for
+- `GlobalResourcePermitTemplateDetail.tsx` provides the shared rich detail for
   both template kinds: approval mode/subjects/CEL, lifecycle and retention,
   parameter schema, and every direct or templated resource group. Global
   templates additionally show resolved Namespace availability as a linked
@@ -719,7 +798,7 @@ links configured` filler. An empty selection means **No Tenant Filter** and
 ## Subject references
 
 - `CapsuleSubjectLink.tsx` is the reusable navigation surface for Capsule and
-  Kubernetes subjects. Tenant owners, TenantOwner identities, BreakRequest
+  Kubernetes subjects. Tenant owners, TenantOwner identities, ResourcePermit
   requestors/reviewers/rendered RBAC subjects, request-template approvers,
   impersonation ServiceAccounts, and Proxy subjects all link to
   `/capsule/subjects/:kind/:subject`. Preserve the current Namespace query when
@@ -735,17 +814,18 @@ links configured` filler. An empty selection means **No Tenant Filter** and
   `system:serviceaccount:namespace:name` are the same identity, while equal
   ServiceAccount names in different Namespaces remain distinct.
 - `CapsuleSubjectSummary.tsx` correlates every visible Tenant owner/promotion,
-  BreakRequest requestor/requestor group/reviewer/execution ServiceAccount/rendered
-  RBAC subject, native RoleBinding/ClusterRoleBinding subject, GlobalProxySettings
+  ResourcePermit requestor/requestor group/reviewer/transition actor/execution
+  ServiceAccount/rendered RBAC subject, native RoleBinding/ClusterRoleBinding subject, GlobalProxySettings
   rule subject, and TenantOwner whose `spec.kind/spec.name` is the exact
-  normalized identity. Its relationship-section order is Tenants, Tenant Owners,
-  Break Requests, Global Proxy Settings, then Bindings.
+  normalized identity. Its relationship-section order is Tenants, Promotions,
+  Tenant Owners, Resource Permits, Global Proxy Settings, then Bindings. Promotions
+  appear only for exact ServiceAccounts reported in `Tenant.status.promotions`.
   Relationship tables and their headings render only when they contain at
   least one hit; API access diagnostics remain independent of those empty
-  sections. Tenant, namespaced RBAC, cluster RBAC, BreakRequest,
+  sections. Tenant, namespaced RBAC, cluster RBAC, ResourcePermit,
   GlobalProxySettings, and TenantOwner requests remain independent: show an API-specific access
   diagnostic when one inventory is forbidden and retain any other readable
-  inventories. Namespaced RBAC and BreakRequest queries must reuse the explicit
+  inventories. Namespaced RBAC and ResourcePermit queries must reuse the explicit
   `?namespace=` array and must not fall back to a second unscoped list.
 
 ## Capsule resource tags
@@ -766,16 +846,16 @@ links configured` filler. An empty selection means **No Tenant Filter** and
   URLs. Namespaced links union the source object's Namespace with the current
   `?namespace=` scope; cluster-scoped links preserve the current scope.
 - The tag inventory independently queries all 14 supported Capsule kinds:
-  BreakRequest, BreakRequestTemplate, CapsuleConfiguration, CustomQuota,
-  GlobalBreakRequestTemplate, GlobalCustomQuota, GlobalProxySettings,
+  ResourcePermit, ResourcePermitTemplate, CapsuleConfiguration, CustomQuota,
+  GlobalResourcePermitTemplate, GlobalCustomQuota, GlobalProxySettings,
   GlobalResourceQuota, GlobalTenantResource, ResourcePool, ResourcePoolClaim,
   Tenant, TenantOwner, and TenantResource. One forbidden or optional API must
   produce a concise partial-access diagnostic without hiding results from
   readable APIs. Rows link to canonical rich resource details.
 - README metadata documentation covers shared tags and includes a valid
-  `BreakRequestTemplate` example showing that both template kinds support
+  `ResourcePermitTemplate` example showing that both template kinds support
   `info.projectcapsule.dev/icon` and `info.projectcapsule.dev/description` also
-  drive template list, detail, and New BreakRequest catalog presentation.
+  drive template list, detail, and New ResourcePermit catalog presentation.
 
 ## TenantOwner pages
 
@@ -1301,18 +1381,21 @@ future agents. Update them whenever the environment changes.
   `make headlamp-sync` is ephemeral. Always finish with `make headlamp-deploy`,
   select the newest Running pod, restart the port-forward, and compare local,
   pod, and served bundle checksums as described above.
-- The BreakRequest audit table is now a stage-colored chronological timeline,
+- The ResourceLease audit table is now a stage-colored chronological timeline,
   with visibly filled/tinted stage bubbles, linked requestor/reviewer actors,
   controller stages linked through the status-reported execution ServiceAccount,
   and linked subjects extracted from rendered RBAC manifests. Subject links
-  across Tenant, TenantOwner, BreakRequest, both BreakRequest template kinds, and
-  GlobalProxySettings open the permission-aware Tenant/RBAC/BreakRequest
+  across Tenant, TenantOwner, ResourceLease, both ResourceLease template kinds, and
+  GlobalProxySettings open the permission-aware Tenant/RBAC/ResourceLease
   correlation page.
-- The Subject activity orders Tenants, Tenant Owners, Break Requests, Global
-  Proxy Settings, then Bindings and omits every empty relationship heading/table.
+- The Subject activity orders Tenants, Promotions, Tenant Owners, Resource Leases,
+  Global Proxy Settings, then Bindings and omits every empty relationship heading/table.
+  Promotions appear only for ServiceAccount subjects and are sourced exclusively
+  from matching `Tenant.status.promotions`; the table exposes the reporting Tenant,
+  Namespace, cluster roles, and targets.
   Review and Expire are dedicated detail-header and table buttons. Reviewable
   requests open the right-side resulting-changes/verdict activity; Expire uses
-  a confirmed terminal status transition. The BreakRequest list also opens a
+  a confirmed terminal status transition. The ResourceLease list also opens a
   prominent template-first, two-step JSON-schema-driven creation activity with
   generated naming and annotated catalog previews. The ordinary request detail hides
   rendered approval resources and shows a verdict overview only for completed
@@ -1332,7 +1415,7 @@ future agents. Update them whenever the environment changes.
   modules and emits a 576.77 kB `main.js` (160.34 kB gzip).
 - Authenticated Chromium verified the template overview and linked Namespace
   availability table, filled audit colors, completed-versus-pending verdict
-  visibility, both default-collapsed BreakRequest data tables and their expand
+  visibility, both default-collapsed ResourceLease data tables and their expand
   action, the linked status ServiceAccount actor, the admin-visible User/alice
   subject page's matching `solar-proxy-settings` section, and both Setup/Template Parameters
   wizard pages including generated naming. It also verified that Request
@@ -1344,9 +1427,9 @@ future agents. Update them whenever the environment changes.
   timestamp. Intercepted read responses additionally
   verified comma-separated tag chips in a Capsule list and detail metadata, the
   right-side Tag activity, and one combined result table containing a tagged
-  Tenant and GlobalBreakRequestTemplate. The runs reported no React/plugin
+  Tenant and GlobalResourceLeaseTemplate. The runs reported no React/plugin
   runtime errors and did not submit any mutation or alter cluster objects. The
-  New BreakRequest browser run also verified removal of the exclusive template
+  New ResourceLease browser run also verified removal of the exclusive template
   dropdown, multi-tag AND filtering, composed text search, primary-tag category
   grids, card selection, and continuation through Setup to Template Parameters.
   A second run used the live `x-capsule-form` template schema and real Kubernetes
@@ -1360,7 +1443,7 @@ future agents. Update them whenever the environment changes.
   time without resources or reviewer identity; the PATCH did not reach
   Kubernetes. A later read-only run verified the exact Review and Expire CLI
   commands on their real surfaces, copied both values through the browser
-  clipboard, cancelled Expire, and confirmed the BreakRequest managed-resource
+  clipboard, cancelled Expire, and confirmed the ResourceLease managed-resource
   table follows its diagram without the redundant inventory heading. Because
   the former pending request had since become Active externally, that run
   intercepted only its named GET to present the existing snapshot as Requested;
@@ -1373,9 +1456,9 @@ future agents. Update them whenever the environment changes.
   local-template Setup loading, explicit review verdict, and prominent audit
   Timestamp without React/plugin runtime errors. Read-only impersonation
   confirmed Alice can
-  list BreakRequests and RoleBindings in the four selected solar Namespaces,
-  and can create/update BreakRequest status, while Tenant,
-  ClusterRoleBinding, and GlobalBreakRequestTemplate list/get remain denied.
+  list ResourceLeases and RoleBindings in the four selected solar Namespaces,
+  and can create/update ResourceLease status, while Tenant,
+  ClusterRoleBinding, and GlobalResourceLeaseTemplate list/get remain denied.
   The subject and create activities therefore retain explicit independent
   diagnostics for those cluster-scoped prerequisites.
 - On 2026-09-01, formatting, lint, TypeScript, all 236 tests across 53 files,
@@ -1387,13 +1470,13 @@ future agents. Update them whenever the environment changes.
   `af75a45d95d13c0b85518e0a6efecfbe9e577b1fcf55444d8be1266690ac02d4`,
   and Flux was resumed afterward.
 - The 2026-09-01 template-catalog regression check found zero live namespaced
-  BreakRequestTemplates and three live GlobalBreakRequestTemplates. The
+  ResourceLeaseTemplates and three live GlobalResourceLeaseTemplates. The
   combined Templates inventory now retains those global entries, summarizes
   their resolved Namespace availability, and keeps partial API errors
   non-fatal. TypeScript, lint, all 237 tests across 53 files, and the production
   build passed. The deployed bundle SHA-256 is
   `29e241cc5083c54512fa86a581d720a9cd9ab97b2f32e1fcf308bb3ba23d026c`.
-- On 2026-09-01, BreakRequest parameter creation moved from the flat custom
+- On 2026-09-01, ResourceLease parameter creation moved from the flat custom
   parser to RJSF/MUI backed by Ajv's JSON Schema 2020-12 implementation.
   Recursive `x-capsule-form` discovery covers the complete supported schema
   keyword set and loop-safe local references; Kubernetes resource selectors
@@ -1407,11 +1490,12 @@ future agents. Update them whenever the environment changes.
   `3d25a875ee72773d430e0cedec2b9c31df46cc403372f08738c1620f3bf2104d`,
   and Flux reconciliation was resumed afterward. Validation did not create or
   mutate any Kubernetes resource.
-- BreakRequest audit sorting uses lifecycle precedence as the tie-breaker for
-  equal transition timestamps. This is required because the controller can
-  report `Active` before `Approved` in `status.conditions` while giving both
-  the same timestamp; the visible order must remain Approved then Active.
-  `breakRequestPhasePresentation()` is the single color/icon source for the
+- The former condition-derived ResourceLease audit sorting used lifecycle
+  precedence as a tie-breaker for equal timestamps. The current API supersedes
+  that behavior with append-only `status.transitions`; the UI now preserves the
+  controller's array order, so equal-time Approved then Active entries remain
+  correctly ordered without reconstructing history from conditions.
+  `resourceLeasePhasePresentation()` is the single color/icon source for the
   audit timeline, phase chips, subject results, and request-summary segments.
   On 2026-09-01, TypeScript, lint, and all 253 tests across 56 files passed. The
   playground build transforms 759 modules and emits an 862.77 kB `main.js`
@@ -1432,18 +1516,228 @@ future agents. Update them whenever the environment changes.
   browser-served bundle checksums match at
   `92caed294621e4347b48a4ed314dbef3d46f3b5f6fea526d0261c1558d81111d`.
   Authenticated clean Chromium renders the Capsule sidebar and rich
-  BreakRequest detail; its audit trail visibly orders equal-timestamp Approved
+  ResourceLease detail; its audit trail visibly orders equal-timestamp Approved
   before Active. No HelmRelease resume or pod rollout was performed.
-- The New BreakRequest wizard now offers optional **View YAML** actions on both
-  Setup and Template Parameters. `BreakRequestYamlDialog.tsx` serializes the
-  same `buildCreateBreakRequest()` body used for submission, including the
+- The New ResourceLease wizard now offers optional **View YAML** actions on both
+  Setup and Template Parameters. `ResourceLeaseYamlDialog.tsx` serializes the
+  same `buildCreateResourceLease()` body used for submission, including the
   JSON Schema form's applied defaults, and provides an in-app preview plus Copy
   and Download; generated-name prefixes produce stable filenames, and
   preview/export never calls the API. Formatting, lint,
   TypeScript, all 255 tests across 57 files, and the production build passed.
   Authenticated Chromium verified both live wizard steps, clipboard content,
   the downloaded `yaml-preview-check.yaml` name, omission of `spec.requestor`,
-  and zero BreakRequest POSTs. Local, pod, and browser-served checksums match at
+  and zero ResourceLease POSTs. Local, pod, and browser-served checksums match at
   `8809942a083220d0463417b96a5f1cd8da465bece4c2c6c5715abad0c48ad3a4`;
   the Flux HelmRelease remains suspended and only the Headlamp server container
   was restarted.
+- Dedicated ResourceLease, combined ResourceLeaseTemplate, CustomQuota, and
+  TenantResource overview tables no longer render Headlamp's Namespace picker.
+  Their Namespace columns and global Tenant/Namespace query scope remain
+  unchanged. Formatting, lint, TypeScript, all 255 tests across 57 files, and
+  the production build passed. Authenticated Chromium found zero Namespace
+  pickers on all four live tables while preserving each route's Namespace query
+  and reported no plugin errors. The injected bundle SHA-256 is
+  `b4ead601efcc667b08919d25f3e1cb342ad75b61f0db983e729a97fbf20fb106`;
+  Flux remains suspended and only the Headlamp server container was restarted.
+- ResourceLease approval no longer requires a review comment. A blank approval
+  omits `status.review.message`; decline still requires a non-empty comment.
+  Formatting, lint, TypeScript, all 256 tests across 57 files, and the
+  production build passed.
+  Authenticated Chromium verified the live empty approval form has no required
+  comment, shows the conditional helper text, and enables **Submit approval**
+  without sending a PATCH or reporting plugin errors. The injected bundle
+  SHA-256 is
+  `1fe37007f1960cd14aa4b0117ab7fa72e82284c58a7c15a83d505900aaf89df7`;
+  Flux remains suspended and only the Headlamp server container was restarted.
+- On 2026-09-02, ResourceLease consumers moved to the controller-resolved
+  `status.request` contract. Lists, details, review, resulting changes, audit
+  actors, and Subject correlation now read its template/version,
+  impersonation, duration/start, retention, and rendered resources. Review
+  lifecycle overrides are submitted under `status.request` without copying
+  controller-owned fields; the former status layout remains a read-only legacy
+  fallback. Formatting, lint, TypeScript, all 257 tests across 57 files, and the
+  production build passed. Authenticated Chromium verified the real
+  `solar-test/clustrrole-alice` status data, resolved detail fields, linked
+  execution ServiceAccount, enabled review, and an intercepted approval body
+  containing only `status.request.duration/startTime`, phase, and verdict. The
+  real object remained Requested/Pending. The injected bundle SHA-256 is
+  `3739847afde689f778203d042d8551bb8bf219670e4c6896d747bd6d30944bbe`;
+  Flux remains suspended and only the Headlamp server container was restarted.
+- The Resource Lease navigation parent is now labeled **Catalog**, retaining
+  the Requests and Templates leaves. The overview places a Namespace-scoped
+  ResourceLease lifecycle/review-workload Catalog card beside the existing Proxy
+  card; its link preserves the selected Namespace query. Formatting, lint,
+  TypeScript, all 258 tests across 57 files, and the production build passed.
+  Authenticated Chromium verified the live Catalog menu, absence of the old
+  label, one visible ResourceLease, side-by-side Catalog/Proxy geometry, and the
+  scoped Requests link without plugin errors. The injected bundle SHA-256 is
+  `05dc7024311d2a040125de0ae5db495a8c1e865891cfdc489812e57cf90a107d`;
+  Flux remains suspended and only the Headlamp server container was restarted.
+- ServiceAccount Subject activities now add a conditional **Promotions** table
+  immediately after Tenants. It reuses the status-authoritative Tenant promotion
+  parser and shows the reporting Tenant, ServiceAccount Namespace, cluster roles,
+  and target Namespaces. Formatting, lint, TypeScript, all 259 tests across 57
+  files, and the production build passed. Authenticated Chromium opened the
+  activity from the live `solar` Tenant's
+  `solar-system/gateway-api-role-distributor` promotion without navigating away,
+  verified both reported cluster roles and all four targets, and found no plugin
+  errors. The injected and served bundle SHA-256 is
+  `8a91ef3679bcaa90f4791eee0f4696309a5ce14ba21390b6218e763437cea374`;
+  Flux remains suspended and only the Headlamp server container was restarted.
+- On 2026-09-02, the plugin was aligned with the current ResourceLease API from
+  the controller repository and the installed CRD. `status.transitions` is now
+  the sole audit-history source and every entry uses its attached actor, reason,
+  message, and timestamps; conditions remain operational state only. The
+  controller snapshot under `status.request` now also drives captured approval
+  policy, rendered resources, template identity, impersonation, timing, and
+  retention. Review submits only the requested phase plus optional comment and
+  timing overrides, while Failed requests expose the controller failure state
+  and a dedicated Retry lifecycle action. Formatting, lint, TypeScript, all 261
+  tests across 58 files, and the production build passed. Authenticated Chromium
+  verified transition-only audit rendering, captured approvals, failure/retry,
+  and an intercepted minimal approval status PATCH without plugin errors. The
+  local, injected, and browser-served bundle SHA-256 is
+  `e53943fcfc5698771057cb830ac9f6c8923b229eaab7f523f0c2d82c777ff2bc`;
+  Flux remains suspended and only the Headlamp server container was restarted.
+- ResourceLeases now show planned lifecycle branches after authenticated history:
+  `status.keepUntil` schedules Archiving, while an Approved request with a future
+  `status.request.startTime` schedules Active and displays its activation time.
+  The phase-colored branch retains 28px separation, is strictly vertical, and
+  runs through an on-spine calendar milestone with the Future lifecycle label
+  beside it. All 42px-grid nodes and 2px connectors share the exact center, and
+  each connector stops at the destination node edge. Archiving chips use filled
+  yellow with dark readable text; Active uses its matching green. Requested is
+  neutral slate, Expired is deep orange, and real actor-backed transitions
+  replace planned markers. Formatting, lint, TypeScript, all 266 tests across 59
+  files, focused timeline tests, and the production build passed. Authenticated
+  Chromium verified both planned phases, exact palette/contrast, centered and
+  edge-stopped geometry, zero horizontal lines, the 28px future gap, and no
+  plugin errors. The local, injected, and browser-served bundle SHA-256 is
+  `4f27c9bfac675c49dd917979d5adf57275c419501a5710baf7dee034db2b2b68`;
+  Flux remains suspended and only the Headlamp server container was restarted.
+- The top app bar now includes a ResourceLease-only EventHub. It resolves the
+  logged-in Kubernetes identity, shows only Active/Approved/Denied/Expired to
+  exact requestors, and only Requested to explicitly matched manual reviewers.
+  Only the final append-only transition for each ResourceLease is eligible, so a
+  request never leaves stale notifications for its earlier stages. Actor
+  identities link to the right-side Subject activity.
+  Its relative-timeframe selector offers 1 hour, 24 hours, 7 days, 30 days, and
+  all time, defaulting to 24 hours. Actionable reviewer entries retain a direct
+  Review action. It does not consume generic Kubernetes Events or actor annotations. Namespace
+  scoping follows the global filter or Catalog query and list errors remain
+  visible. Formatting, lint, TypeScript, all 272 tests across 60 files, focused
+  identity/feed tests, and the production build passed. Authenticated Chromium
+  impersonated the live requestor identity and intercepted only the browser list
+  response to add that identity as an explicit reviewer, without mutating the
+  cluster. It verified only the latest Expired requestor transition, only the
+  latest Requested reviewer transition, both actor Subject links, the Review
+  action, default 24-hour scope, an empty 1-hour scope, restored all-time
+  results, four-Namespace scope, and zero plugin runtime errors. The local and
+  injected bundle SHA-256 is
+  `2e5e4acc37e3824f0953766ebe12e8b15ade7e84cbaf31a1cae580ece55c952f`;
+  Flux remains suspended and only the Headlamp server container was restarted.
+- EventHub discovery is no longer limited to the Namespace filter on the page
+  currently open. Its primary watch spans all Headlamp-permitted Namespaces so
+  explicitly named reviewers see Requested work outside the selected UI scope;
+  a failed all-Namespaces list falls back to the selected Namespace/query scope
+  for restricted Tenant users. The obsolete Namespace-count chip was replaced
+  by an Event type selector with All events, Action required, and Informational
+  choices. Formatting, lint, TypeScript, all 273 tests across 60 files, and the
+  production build passed. Authenticated Chromium injected only a browser-local
+  Requested response in an unselected Namespace and verified it appeared for
+  the explicit approver, retained Review, separated cleanly from informational
+  transitions under both filters, removed the Namespace chip, and produced no
+  plugin runtime errors. The cluster was not mutated. The local and injected
+  bundle SHA-256 is
+  `831429f2d1568b3eb6e59dc2aec86dc787f1cef7dcc89a89fd15e203343b7b5a`;
+  Flux remains suspended and only the Headlamp server container was restarted.
+- On 2026-09-04, the complete Catalog surface migrated to Capsule's renamed
+  v1beta2 Resource Lease APIs: namespaced `ResourceLease` and
+  `ResourceLeaseTemplate`, plus cluster-scoped `GlobalResourceLeaseTemplate`.
+  Resource classes, canonical CRD routes, create/review/retry/expire requests,
+  subject and tag correlation, overview statistics, EventHub, and CLI snippets
+  use only the new API names. `status.request` is the sole request snapshot and
+  the API phase/transition union excludes the presentation-only future
+  Archiving milestone. Catalog is now a top-level sidebar group beside Capsule.
+  Formatting, lint, TypeScript, all 273 tests across 60 files, and the production
+  build passed. Authenticated Chromium verified the injected canonical Requests
+  and Templates links, root Catalog visibility, and zero plugin runtime errors
+  with a browser-local ResourceLease response. The current kind cluster does not
+  yet have the three renamed CRDs installed, so its backend data was not mutated.
+  The local and injected bundle SHA-256 is
+  `230d546a06d2feefc349b35f889a5cf661f182c16b18bb3e7b0a65abb88a1f29`;
+  Flux remains suspended and only the Headlamp server container was restarted.
+- On 2026-09-09, the live GlobalResourceLeaseTemplate API contains
+  `clusterrole-bindings`, labeled `company.com/consumer=tenants`. Alice's missing
+  catalog entry was caused by stale generated GlobalProxySettings that still
+  granted List on `globalbreakrequesttemplates`. The owning
+  `GlobalTenantResource/capsule-proxy-settings` already used
+  `globalresourceleasetemplates`, but its generation was 4 while
+  `status.observedGeneration` was 3. Capsule resumed reconciliation during
+  diagnosis, caught up to generation 4, and updated the generated policies;
+  `solar-proxy-settings` then reported Ready at generation 7. The template also
+  acquired `status.namespaces: ["*"]`. Authenticated Chromium verified Alice's
+  combined Templates inventory contains `clusterrole-bindings` with Global /
+  All Namespaces scope, and its list and named GET through Headlamp both return
+  HTTP 200. Alice could also open the rich detail and see the template in the
+  New ResourceLease picker, with no plugin runtime errors. No plugin or
+  access-policy change was needed. When this recurs,
+  check the generator's observed generation and the template's reported
+  Namespace availability before changing frontend filtering or granting RBAC.
+- On 2026-09-09, the Permits workflow enables generated names by default,
+  accepts an optional Reason, and opens the created request's canonical detail
+  while closing its wizard. Reviews show a yellow retention bubble with an
+  embedded archive icon; denied requests retain their future Archiving marker
+  even before the controller supplies `keepUntil`. Managed inventories retain
+  controller-reported rows during failed live reads, consume nested processed
+  status/messages and cluster scope, and replace refreshed live objects instead
+  of ignoring watch updates. The main sidebar is **Tenants**, with nested
+  **Permits → Requests / Templates**. Formatting, lint, TypeScript, 282 tests
+  across 62 files, and the production build passed. Authenticated Chromium
+  verified generated-name submission without Reason, the exact creation redirect
+  and closed wizard, both retention modes, denied Archiving, and inventory rows
+  under forbidden live GETs. Those browser checks intercepted fixture responses
+  and the creation POST; no live ResourceLease was created, approved, or expired.
+  The final local/injected bundle SHA-256 is
+  `445a1fe996a8415c4ec7f7cb77cfd1bc6e50b6d3cda1a326f6c44c337cdbe6af`.
+  Headlamp is ready and Flux remains suspended for the playground development
+  injection.
+- On 2026-09-09, the complete permit surface migrated from the ResourceLease
+  names to `ResourcePermit`, `ResourcePermitTemplate`, and
+  `GlobalResourcePermitTemplate`, still under `capsule.clastix.io/v1beta2`.
+  `src/components/resource-permits/` and `src/resources/resourcePermits.ts` own
+  the renamed implementation. Canonical/alias routes, API mutations, overview,
+  EventHub, subject/tag correlation, managed-resource icons, authorization table
+  IDs, and `kubectl capsule resource-permit` commands use the new names. Runtime
+  source and the built bundle contain no retired lease API references; older
+  verification entries above describe the names in use at the time.
+  Formatting, lint, TypeScript, all 282 tests across 62 files, and the production
+  build passed. Authenticated Chromium verified both template kinds' combined
+  inventory and rich details, generated creation/redirect, retention modes,
+  denied Archiving, nested processed-item state under forbidden live reads,
+  and the renamed CLI. No retired endpoints or plugin runtime errors occurred.
+  These checks used browser-local API fixtures and intercepted creation because
+  the kind playground initially lacked the three ResourcePermit CRDs. They were
+  installed externally during validation, but all three live inventories were
+  still empty. A separate unmocked Alice check returned HTTP 200 for ResourcePermits
+  in `solar-prod` and HTTP 403 for both the global template list and the namespaced
+  template list in `solar-prod`. Generated `solar-proxy-settings` still granted
+  List on `globalresourceleasetemplates`; backend template objects and matching
+  template RBAC/proxy policies must migrate before Alice can use them. Backend
+  resources and proxy policies were not changed. The local/injected bundle SHA-256 is
+  `ab8e7d71a459c2d71c5c61317f95ea25dafd0718a138b49bf29a470a51e6ed02`;
+  Headlamp is ready and Flux remains suspended for development injection.
+- On 2026-09-09, ResourcePermit live inventory was empty when a selected Tenant
+  excluded its managed targets' Namespaces. Reproduced on
+  `solar-system/adad-7qv4h`: selecting Solar hid the two RoleBindings in
+  `green-test` and `green-uat` from the table while the flow still showed both.
+  The shared managed-resource table now bypasses the global Namespace filter
+  and leaves text matching to Headlamp's column search. Formatting, lint,
+  TypeScript, all 282 tests across 62 files, and the production build passed.
+  Authenticated Chromium verified both rows with Solar selected using Alice's
+  unmodified API responses (live RoleBinding reads returned 403), then verified
+  populated links/ages and working name filters with browser-local successful
+  RoleBinding responses. No cluster objects or permissions were changed.
+  Playground reload/status confirmed Headlamp Ready and matching local/pod
+  SHA-256 `d74ad7585e3160f18d6ef70e4f0624ad93a47a5784324217faa3dc3acc26d28e`.
