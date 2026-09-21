@@ -1,9 +1,11 @@
-import { Typography } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import { useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import { CAPSULE_CRDS } from '../../resources/capsuleCustomResources';
 import { CustomQuota, GlobalCustomQuota } from '../../resources/customQuotas';
 import { GlobalProxySettings } from '../../resources/globalProxySettings';
 import { GlobalResourceQuota } from '../../resources/globalResourceQuotas';
+import { ResourcePermit } from '../../resources/resourcePermits';
 import { ResourcePool } from '../../resources/resourcePools';
 import { TenantOwner } from '../../resources/tenantOwners';
 import {
@@ -18,8 +20,17 @@ import { useFetchedResources } from '../common/ManagedResources';
 import { StatCard } from '../common/StatCard';
 import { SummaryCardGrid } from '../common/SummaryCardGrid';
 import { summarizeGlobalProxySettings } from '../proxy/globalProxySettingsHelpers';
+import {
+  resourcePermitNamespacesFromSearch,
+  resourcePermitPhasePresentation,
+} from '../resource-permits/resourcePermitHelpers';
 import { CapsuleEvents } from './CapsuleEvents';
-import { countQuotaHealth, countReadiness, countResourcePools } from './overviewStats';
+import {
+  countQuotaHealth,
+  countReadiness,
+  countResourcePermitCatalog,
+  countResourcePools,
+} from './overviewStats';
 
 const footer = (text: string) => (
   <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.25 }}>
@@ -28,6 +39,11 @@ const footer = (text: string) => (
 );
 
 export function CapsuleOverview() {
+  const location = useLocation();
+  const resourcePermitNamespaces = useMemo(
+    () => resourcePermitNamespacesFromSearch(location.search),
+    [location.search]
+  );
   const [tenants] = Tenants.useList();
   const [customQuotas] = CustomQuota.useList();
   const [globalCustomQuotas] = GlobalCustomQuota.useList();
@@ -37,6 +53,9 @@ export function CapsuleOverview() {
   const [resourcePools] = ResourcePool.useList();
   const [tenantOwners] = TenantOwner.useList();
   const [globalProxySettings, globalProxySettingsError] = GlobalProxySettings.useList();
+  const [resourcePermits, resourcePermitsError] = ResourcePermit.useList({
+    namespace: resourcePermitNamespaces.length > 0 ? resourcePermitNamespaces : undefined,
+  });
 
   const allManagedApplied = useMemo(() => {
     const fromGlobal = (globalTenantResources || []).flatMap(resource =>
@@ -80,6 +99,7 @@ export function CapsuleOverview() {
     const tenantOwnerReadiness = countReadiness(tenantOwners);
     const resourcePoolState = countResourcePools(resourcePools);
     const globalProxySettingsState = summarizeGlobalProxySettings(globalProxySettings);
+    const resourcePermitCatalogState = countResourcePermitCatalog(resourcePermits);
 
     let managedReady = 0;
     let managedNotReady = 0;
@@ -122,6 +142,7 @@ export function CapsuleOverview() {
       tenantOwnerReadiness,
       resourcePoolState,
       globalProxySettingsState,
+      resourcePermitCatalogState,
       managed: {
         ready: managedReady,
         notReady: managedNotReady,
@@ -139,6 +160,7 @@ export function CapsuleOverview() {
     tenantOwners,
     resourcePools,
     globalProxySettings,
+    resourcePermits,
     managedObjects,
     allManagedApplied,
   ]);
@@ -367,43 +389,137 @@ export function CapsuleOverview() {
         />
       </SummaryCardGrid>
 
-      <SummaryCardGrid title="Proxy" columns={3}>
-        <StatCard
-          label="GLOBAL PROXY SETTINGS"
-          routeName="customresources"
-          routeParams={{ crd: CAPSULE_CRDS.GlobalProxySettings }}
-          total={stats.globalProxySettingsState.total}
-          fullHeight
-          emptyLabel={globalProxySettingsError ? 'Unavailable' : 'None'}
-          segments={[
-            {
-              name: 'Ready',
-              value: stats.globalProxySettingsState.ready,
-              color: '#4caf50',
-            },
-            {
-              name: 'Not Ready',
-              value: stats.globalProxySettingsState.notReady,
-              color: '#f44336',
-            },
-          ]}
-          chips={[
-            {
-              label: `${stats.globalProxySettingsState.ready} Ready`,
-              color: 'success',
-            },
-            {
-              label: `${stats.globalProxySettingsState.notReady} Not Ready`,
-              color: 'error',
-            },
-          ]}
-          footer={footer(
-            globalProxySettingsError
-              ? 'Capsule Proxy API unavailable'
-              : `${stats.globalProxySettingsState.rules} Rules · ${stats.globalProxySettingsState.subjects} Subjects`
-          )}
-        />
-      </SummaryCardGrid>
+      <Box
+        sx={{
+          display: 'grid',
+          gap: 2,
+          gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'repeat(2, minmax(0, 1fr))' },
+          minWidth: 0,
+        }}
+      >
+        <SummaryCardGrid title="Permits" columns={1}>
+          <StatCard
+            label="BREAK REQUESTS"
+            routeName="customresources"
+            routeParams={{ crd: CAPSULE_CRDS.ResourcePermit }}
+            routeSearch={
+              resourcePermitNamespaces.length > 0
+                ? { namespace: resourcePermitNamespaces.join(' ') }
+                : undefined
+            }
+            total={stats.resourcePermitCatalogState.total}
+            emptyLabel={resourcePermitsError ? 'Unavailable' : 'None'}
+            segments={[
+              {
+                name: 'Created',
+                value: stats.resourcePermitCatalogState.created,
+                color: resourcePermitPhasePresentation('Created').color,
+              },
+              {
+                name: 'Requested',
+                value: stats.resourcePermitCatalogState.requested,
+                color: resourcePermitPhasePresentation('Requested').color,
+              },
+              {
+                name: 'Pending',
+                value: stats.resourcePermitCatalogState.pending,
+                color: resourcePermitPhasePresentation('Pending').color,
+              },
+              {
+                name: 'Approved',
+                value: stats.resourcePermitCatalogState.approved,
+                color: resourcePermitPhasePresentation('Approved').color,
+              },
+              {
+                name: 'Active',
+                value: stats.resourcePermitCatalogState.active,
+                color: resourcePermitPhasePresentation('Active').color,
+              },
+              {
+                name: 'Failed',
+                value: stats.resourcePermitCatalogState.failed,
+                color: resourcePermitPhasePresentation('Failed').color,
+              },
+              {
+                name: 'Retrying',
+                value: stats.resourcePermitCatalogState.retrying,
+                color: resourcePermitPhasePresentation('Retrying').color,
+              },
+              {
+                name: 'Denied',
+                value: stats.resourcePermitCatalogState.denied,
+                color: resourcePermitPhasePresentation('Denied').color,
+              },
+              {
+                name: 'Expired',
+                value: stats.resourcePermitCatalogState.expired,
+                color: resourcePermitPhasePresentation('Expired').color,
+              },
+            ]}
+            chips={[
+              {
+                label: `${stats.resourcePermitCatalogState.reviewable} Awaiting review`,
+                color: 'warning',
+              },
+              {
+                label: `${stats.resourcePermitCatalogState.active} Active`,
+                color: 'success',
+              },
+              {
+                label: `${stats.resourcePermitCatalogState.failed} Failed`,
+                color: 'error',
+              },
+              {
+                label: `${stats.resourcePermitCatalogState.retrying} Retrying`,
+                color: 'warning',
+              },
+            ]}
+            footer={footer(
+              resourcePermitsError
+                ? 'ResourcePermit API unavailable in the selected scope'
+                : 'Lifecycle across the selected Namespace scope'
+            )}
+          />
+        </SummaryCardGrid>
+
+        <SummaryCardGrid title="Proxy" columns={1}>
+          <StatCard
+            label="GLOBAL PROXY SETTINGS"
+            routeName="customresources"
+            routeParams={{ crd: CAPSULE_CRDS.GlobalProxySettings }}
+            total={stats.globalProxySettingsState.total}
+            fullHeight
+            emptyLabel={globalProxySettingsError ? 'Unavailable' : 'None'}
+            segments={[
+              {
+                name: 'Ready',
+                value: stats.globalProxySettingsState.ready,
+                color: '#4caf50',
+              },
+              {
+                name: 'Not Ready',
+                value: stats.globalProxySettingsState.notReady,
+                color: '#f44336',
+              },
+            ]}
+            chips={[
+              {
+                label: `${stats.globalProxySettingsState.ready} Ready`,
+                color: 'success',
+              },
+              {
+                label: `${stats.globalProxySettingsState.notReady} Not Ready`,
+                color: 'error',
+              },
+            ]}
+            footer={footer(
+              globalProxySettingsError
+                ? 'Capsule Proxy API unavailable'
+                : `${stats.globalProxySettingsState.rules} Rules · ${stats.globalProxySettingsState.subjects} Subjects`
+            )}
+          />
+        </SummaryCardGrid>
+      </Box>
 
       <CapsuleEvents />
     </>

@@ -73,7 +73,9 @@ export function CustomQuotasList() {
         id="capsule-custom-quotas"
         title="Custom Quotas"
         resourceClass={CustomQuota}
-        headerProps={anchoredResourceListHeaderProps('Custom Quotas')}
+        headerProps={anchoredResourceListHeaderProps('Custom Quotas', {
+          headerProps: { noNamespaceFilter: true },
+        })}
         columns={[
           {
             id: 'name',

@@ -1,6 +1,6 @@
 import '@xyflow/react/dist/base.css';
 import { Icon } from '@iconify/react';
-import { alpha, Box, Chip, Typography } from '@mui/material';
+import { alpha, Box, Chip, Link as MuiLink, Typography } from '@mui/material';
 import type { Edge, Node } from '@xyflow/react';
 import {
   Background,
@@ -13,6 +13,7 @@ import {
   ReactFlowProvider,
 } from '@xyflow/react';
 import { useMemo } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import { findSpaceInfo, isSpaceReady } from '../../utils/tenantSpaces';
 
 const TARGETS_PER_COLUMN = 4;
@@ -32,6 +33,11 @@ export interface TenantStatusOwner {
   clusterRoles: string[];
   kind: string;
   name: string;
+}
+
+export interface TenantSubjectLinkTarget {
+  href: string;
+  open: () => void;
 }
 
 /** The controller-resolved status is authoritative for the relationship graph. */
@@ -57,6 +63,22 @@ export function tenantStatusOwners(tenant: any): TenantStatusOwner[] {
 
 function OwnerNode({ data }: any) {
   const isGroup = String(data.kind).toLowerCase() === 'group';
+  const identity = data.subjectLink ? (
+    <MuiLink
+      component={RouterLink}
+      to={data.subjectLink.href}
+      className="nodrag nopan"
+      onClick={event => {
+        if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+        event.preventDefault();
+        data.subjectLink.open();
+      }}
+    >
+      {data.name}
+    </MuiLink>
+  ) : (
+    data.name
+  );
   return (
     <Box
       sx={theme => ({
@@ -80,7 +102,7 @@ function OwnerNode({ data }: any) {
           {data.kind} owner
         </Typography>
         <Typography variant="body2" noWrap sx={{ fontWeight: 700 }}>
-          {data.name}
+          {identity}
         </Typography>
         {data.clusterRoles.length > 0 && (
           <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
@@ -191,7 +213,11 @@ const nodeTypes = {
   namespace: NamespaceNode,
 };
 
-export function buildTenantNamespaceFlowGraph(tenant: any, namespaces: any[]) {
+export function buildTenantNamespaceFlowGraph(
+  tenant: any,
+  namespaces: any[],
+  subjectLink?: (owner: TenantStatusOwner) => TenantSubjectLinkTarget | undefined
+) {
   const json = tenantData(tenant);
   const tenantName = json?.metadata?.name || tenant?.getName?.() || 'Tenant';
   const owners = tenantStatusOwners(tenant);
@@ -233,10 +259,10 @@ export function buildTenantNamespaceFlowGraph(tenant: any, namespaces: any[]) {
         x: 24 + column * 285,
         y: layoutCenter - columnBounds / 2 + row * OWNER_STEP_Y,
       },
-      data: { ...owner },
+      data: { ...owner, subjectLink: subjectLink?.(owner) },
       draggable: false,
       selectable: false,
-      style: { height: OWNER_HEIGHT, width: OWNER_WIDTH },
+      style: { height: OWNER_HEIGHT, pointerEvents: 'all', width: OWNER_WIDTH },
     });
     edges.push({
       id: `${id}-${sourceId}`,
@@ -289,10 +315,18 @@ export function buildTenantNamespaceFlowGraph(tenant: any, namespaces: any[]) {
   return { nodes, edges };
 }
 
-export function TenantNamespaceFlow({ tenant, namespaces }: { tenant: any; namespaces: any[] }) {
+export function TenantNamespaceFlow({
+  tenant,
+  namespaces,
+  subjectLink,
+}: {
+  tenant: any;
+  namespaces: any[];
+  subjectLink?: (owner: TenantStatusOwner) => TenantSubjectLinkTarget | undefined;
+}) {
   const graph = useMemo(
-    () => buildTenantNamespaceFlowGraph(tenant, namespaces),
-    [tenant, namespaces]
+    () => buildTenantNamespaceFlowGraph(tenant, namespaces, subjectLink),
+    [tenant, namespaces, subjectLink]
   );
   const ownerCount = tenantStatusOwners(tenant).length;
   const rowCount = Math.max(

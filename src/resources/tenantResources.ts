@@ -92,6 +92,9 @@ export interface TenantResourceObject extends KubeObjectInterface {
     };
     resyncPeriod?: string;
     resources?: any[];
+    serviceAccount?: {
+      name?: string;
+    };
   };
   status?: {
     resources?: ResourceStatusEntry[];
@@ -121,6 +124,10 @@ export interface GlobalTenantResourceObject extends KubeObjectInterface {
     };
     resyncPeriod?: string;
     resources?: any[];
+    serviceAccount?: {
+      name?: string;
+      namespace?: string;
+    };
   };
   status?: {
     resources?: ResourceStatusEntry[];

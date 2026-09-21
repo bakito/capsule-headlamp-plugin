@@ -3,6 +3,7 @@ import { buildTenantOwnerFlowGraph } from './TenantOwnerFlow';
 
 describe('TenantOwner reference flow', () => {
   it('connects the owner identity to linked, interactive Tenant nodes', () => {
+    const open = () => undefined;
     const graph = buildTenantOwnerFlowGraph(
       {
         metadata: { name: 'platform' },
@@ -11,7 +12,8 @@ describe('TenantOwner reference flow', () => {
       [
         { metadata: { name: 'green' }, status: { state: 'Active' } },
         { metadata: { name: 'wind' }, spec: { cordoned: true } },
-      ]
+      ],
+      { href: '/capsule/subjects/Group/oidc:org:platform', open }
     );
 
     expect(graph.nodes).toHaveLength(3);
@@ -24,7 +26,9 @@ describe('TenantOwner reference flow', () => {
       identity: 'oidc:org:platform',
       kind: 'Group',
       references: 2,
+      subjectLink: { href: '/capsule/subjects/Group/oidc:org:platform', open },
     });
+    expect(graph.nodes[0].style).toMatchObject({ pointerEvents: 'all' });
     expect(graph.nodes[1].style).toMatchObject({ pointerEvents: 'all' });
     expect(graph.nodes[2].data).toMatchObject({ cordoned: true, name: 'wind' });
   });

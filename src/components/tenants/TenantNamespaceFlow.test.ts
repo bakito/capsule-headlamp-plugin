@@ -28,7 +28,11 @@ describe('tenant namespace flow', () => {
       getName: () => 'solar-test',
       jsonData: { metadata: { name: 'solar-test' }, status: { phase: 'Active' } },
     };
-    const graph = buildTenantNamespaceFlowGraph(tenant, [namespace]);
+    const open = () => undefined;
+    const graph = buildTenantNamespaceFlowGraph(tenant, [namespace], owner => ({
+      href: `/capsule/subjects/${owner.kind}/${owner.name}`,
+      open,
+    }));
 
     expect(graph.nodes).toHaveLength(4);
     expect(graph.edges).toHaveLength(3);
@@ -46,7 +50,12 @@ describe('tenant namespace flow', () => {
       clusterRoles: ['admin'],
       kind: 'User',
       name: 'alice',
+      subjectLink: {
+        href: '/capsule/subjects/User/alice',
+        open,
+      },
     });
+    expect(graph.nodes[2].style).toMatchObject({ pointerEvents: 'all' });
     expect(graph.nodes.map(node => node.data.name)).not.toContain('spec-only');
     expect(graph.nodes[3].data).toMatchObject({ ready: true, cordoned: true });
   });

@@ -3,6 +3,7 @@ import { KubeObject, type KubeObjectInterface } from '@kinvolk/headlamp-plugin/l
 export interface GlobalProxySubject {
   kind: 'User' | 'Group' | 'ServiceAccount' | string;
   name: string;
+  namespace?: string;
 }
 
 export interface GlobalProxySelectorExpression {

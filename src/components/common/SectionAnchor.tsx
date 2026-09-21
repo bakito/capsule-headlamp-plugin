@@ -1,6 +1,7 @@
 import { Icon } from '@iconify/react';
 import { Box, IconButton, Tooltip, Typography, type TypographyProps } from '@mui/material';
 import { type ReactNode, useEffect } from 'react';
+import { sectionAnchorsEnabled, useCapsulePluginConfig } from './capsulePluginConfig';
 
 /** Converts a visible section title into a stable, URL-safe fragment identifier. */
 export function sectionAnchorId(title: string): string {
@@ -26,14 +27,19 @@ function hashTarget(): string {
 
 export function SectionAnchorLink({ anchor, label }: { anchor?: string; label: string }) {
   const id = sectionAnchorId(anchor || label);
+  const config = useCapsulePluginConfig();
+  const enabled = sectionAnchorsEnabled(config);
 
   useEffect(() => {
+    if (!enabled) return;
     if (hashTarget() !== id) return;
     const frame = window.requestAnimationFrame(() => {
       document.getElementById(id)?.scrollIntoView({ block: 'start' });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [id]);
+  }, [enabled, id]);
+
+  if (!enabled) return null;
 
   return (
     <Box

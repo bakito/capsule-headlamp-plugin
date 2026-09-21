@@ -28,6 +28,11 @@ function objectData(item: any) {
   return item?.jsonData || item || {};
 }
 
+export interface TenantOwnerSubjectLinkTarget {
+  href: string;
+  open: () => void;
+}
+
 function tenantURL(name: string, cluster?: string): string {
   const routeCluster =
     cluster ||
@@ -37,6 +42,23 @@ function tenantURL(name: string, cluster?: string): string {
 }
 
 function OwnerNode({ data }: any) {
+  const identity = data.subjectLink ? (
+    <MuiLink
+      component={RouterLink}
+      to={data.subjectLink.href}
+      className="nodrag nopan"
+      onClick={event => {
+        if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+        event.preventDefault();
+        data.subjectLink.open();
+      }}
+      sx={{ color: 'inherit' }}
+    >
+      {data.identity}
+    </MuiLink>
+  ) : (
+    data.identity
+  );
   return (
     <Box
       sx={theme => ({
@@ -62,7 +84,7 @@ function OwnerNode({ data }: any) {
           {data.name}
         </Typography>
         <Typography variant="caption" noWrap sx={{ color: 'inherit', opacity: 0.82 }}>
-          {data.identity}
+          {identity}
         </Typography>
       </Box>
       <Chip size="small" label={`${data.references} tenant${data.references === 1 ? '' : 's'}`} />
@@ -139,7 +161,11 @@ const nodeTypes = {
   tenantReference: TenantReferenceNode,
 };
 
-export function buildTenantOwnerFlowGraph(owner: any, tenants: any[]) {
+export function buildTenantOwnerFlowGraph(
+  owner: any,
+  tenants: any[],
+  subjectLink?: TenantOwnerSubjectLinkTarget
+) {
   const ownerJson = objectData(owner);
   const identity = tenantOwnerIdentity(owner);
   const ownerName = ownerJson.metadata?.name || owner?.getName?.() || 'TenantOwner';
@@ -162,10 +188,11 @@ export function buildTenantOwnerFlowGraph(owner: any, tenants: any[]) {
         kind: identity.kind,
         name: ownerName,
         references: tenants.length,
+        subjectLink,
       },
       draggable: false,
       selectable: false,
-      style: { height: SOURCE_HEIGHT, width: 300 },
+      style: { height: SOURCE_HEIGHT, pointerEvents: 'all', width: 300 },
     },
   ];
   const edges: Edge[] = [];
@@ -205,8 +232,19 @@ export function buildTenantOwnerFlowGraph(owner: any, tenants: any[]) {
   return { edges, nodes };
 }
 
-export function TenantOwnerFlow({ owner, tenants }: { owner: any; tenants: any[] }) {
-  const graph = useMemo(() => buildTenantOwnerFlowGraph(owner, tenants), [owner, tenants]);
+export function TenantOwnerFlow({
+  owner,
+  tenants,
+  subjectLink,
+}: {
+  owner: any;
+  tenants: any[];
+  subjectLink?: TenantOwnerSubjectLinkTarget;
+}) {
+  const graph = useMemo(
+    () => buildTenantOwnerFlowGraph(owner, tenants, subjectLink),
+    [owner, tenants, subjectLink]
+  );
   const height = Math.min(570, Math.max(300, Math.min(tenants.length, 4) * 106 + 52));
 
   return (

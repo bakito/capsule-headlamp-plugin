@@ -5,7 +5,7 @@ import Resource, { SimpleTable } from '@kinvolk/headlamp-plugin/lib/components/c
 import { Alert, AlertTitle, Avatar, Box, Chip, IconButton, Typography } from '@mui/material';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { useParams } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import { Tenants } from '../../resources/tenants';
 import {
   getTenantBanner,
@@ -28,7 +28,17 @@ import {
   persistentVolumesForTenant,
 } from '../storage/persistentVolumeTenant';
 import { TenantPersistentVolumes } from '../storage/TenantPersistentVolumes';
-import { TenantNamespaceFlow } from './TenantNamespaceFlow';
+import {
+  capsuleSubjectHref,
+  CapsuleSubjectLink,
+  openCapsuleSubjectActivity,
+} from '../subjects/CapsuleSubjectLink';
+import { normalizeCapsuleSubject } from '../subjects/subjectReferences';
+import {
+  TenantNamespaceFlow,
+  type TenantStatusOwner,
+  type TenantSubjectLinkTarget,
+} from './TenantNamespaceFlow';
 import { TenantQuotaOverview } from './TenantQuotaOverview';
 import {
   type PromotedServiceAccount,
@@ -42,6 +52,7 @@ export interface TenantProps {
 
 export function TenantDetail(props: TenantProps) {
   const params = useParams<{ name: string }>();
+  const location = useLocation();
   const { name = params.name } = props;
   const [bannerDismissed, setBannerDismissed] = useState(false);
 
@@ -98,6 +109,19 @@ export function TenantDetail(props: TenantProps) {
     tenant?.spec?.nodeSelector ||
     tenant?.spec?.storageClasses ||
     tenant?.spec?.ingressClasses
+  );
+  const tenantSubjectLink = useCallback(
+    (owner: TenantStatusOwner): TenantSubjectLinkTarget | undefined => {
+      const subject = normalizeCapsuleSubject(owner);
+      if (!subject) return undefined;
+      const namespaces = getTenantSpaceNames(tenant);
+      const target = capsuleSubjectHref(subject, namespaces, location.search);
+      return {
+        href: target.href,
+        open: () => openCapsuleSubjectActivity(subject, target.namespaces),
+      };
+    },
+    [location.search, tenant]
   );
 
   // Banner as sticky acknowledgeable notification
@@ -178,16 +202,21 @@ export function TenantDetail(props: TenantProps) {
             {
               name: 'Owners',
               value:
-                owners.length > 0
-                  ? owners.map((o: any, idx: number) => (
-                      <Chip
+                owners.length > 0 ? (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                    {owners.map((o: any, idx: number) => (
+                      <CapsuleSubjectLink
                         key={idx}
-                        size="small"
-                        label={`${o.name} (${o.kind || 'User'})`}
-                        sx={{ mr: 0.5, mb: 0.25 }}
+                        display="chip"
+                        kind={o.kind || 'User'}
+                        name={o.name}
+                        namespaces={getTenantSpaceNames(item)}
                       />
-                    ))
-                  : '—',
+                    ))}
+                  </Box>
+                ) : (
+                  '—'
+                ),
             },
           ];
           if (namespaceQuota) {
@@ -222,7 +251,11 @@ export function TenantDetail(props: TenantProps) {
 
           <TenantQuotaOverview tenant={tenant} />
 
-          <TenantNamespacesOverview tenant={tenant} tenantNamespaces={tenantNamespaces} />
+          <TenantNamespacesOverview
+            tenant={tenant}
+            tenantNamespaces={tenantNamespaces}
+            subjectLink={tenantSubjectLink}
+          />
 
           <TenantPersistentVolumes
             claims={tenantPersistentVolumeClaims}
@@ -331,13 +364,11 @@ function TenantPromotedServiceAccounts({
           {
             label: 'ServiceAccount',
             getter: (promotion: PromotedServiceAccount) => (
-              <Link
-                routeName="serviceAccount"
-                params={{ namespace: promotion.namespace, name: promotion.name }}
-                activeCluster={tenant?.cluster}
-              >
-                {promotion.name}
-              </Link>
+              <CapsuleSubjectLink
+                kind="ServiceAccount"
+                name={promotion.identity}
+                namespaces={[promotion.namespace]}
+              />
             ),
           },
           {
@@ -489,9 +520,11 @@ function LabelsCell({ labels }: { labels: Record<string, string> }) {
 function TenantNamespacesOverview({
   tenant,
   tenantNamespaces,
+  subjectLink,
 }: {
   tenant?: any;
   tenantNamespaces: any[];
+  subjectLink?: (owner: TenantStatusOwner) => TenantSubjectLinkTarget | undefined;
 }) {
   return (
     <SectionBox title="Namespaces">
@@ -505,7 +538,11 @@ function TenantNamespacesOverview({
       >
         <Box sx={{ minWidth: 0 }}>
           {tenantNamespaces.length > 0 ? (
-            <TenantNamespaceFlow tenant={tenant} namespaces={tenantNamespaces} />
+            <TenantNamespaceFlow
+              tenant={tenant}
+              namespaces={tenantNamespaces}
+              subjectLink={subjectLink}
+            />
           ) : (
             <Box
               sx={{

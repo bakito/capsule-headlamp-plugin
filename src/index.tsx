@@ -31,6 +31,7 @@ import {
 } from './components/common/ReconcileActions';
 import { CapsuleConfigurationDetail } from './components/configuration/CapsuleConfigurationDetail';
 import { CapsuleConfigurationList } from './components/configuration/CapsuleConfigurationList';
+import { CapsuleEventHub } from './components/event-hub/CapsuleEventHub';
 import { CapsuleMap } from './components/map/CapsuleMap';
 import { processNamespaceDetailsSections } from './components/namespaces/NamespaceDetailsIntegration';
 import { CapsuleOverview } from './components/overview/CapsuleOverview';
@@ -47,8 +48,23 @@ import { GlobalResourceQuotasList } from './components/quotas/GlobalResourceQuot
 import { ResourcePoolClaimDetail } from './components/quotas/ResourcePoolClaimDetail';
 import { ResourcePoolDetail } from './components/quotas/ResourcePoolDetail';
 import { ResourcePoolsList } from './components/quotas/ResourcePoolList';
+import {
+  GlobalResourcePermitTemplateDetail,
+  ResourcePermitTemplateDetail,
+} from './components/resource-permits/GlobalResourcePermitTemplateDetail';
+import { GlobalResourcePermitTemplatesList } from './components/resource-permits/GlobalResourcePermitTemplateList';
+import { ResourcePermitDetail } from './components/resource-permits/ResourcePermitDetail';
+import { ResourcePermitExpireAction } from './components/resource-permits/ResourcePermitExpireAction';
+import { ResourcePermitReviewAction } from './components/resource-permits/ResourcePermitHeaderActions';
+import { ResourcePermitsList } from './components/resource-permits/ResourcePermitList';
+import { ResourcePermitRetryAction } from './components/resource-permits/ResourcePermitRetryAction';
+import { ResourcePermitTemplatesList } from './components/resource-permits/ResourcePermitTemplateList';
 import { CapsuleSettings } from './components/settings/CapsuleSettings';
 import { processPersistentVolumeDetailsSections } from './components/storage/PersistentVolumeTenantIntegration';
+import { CapsuleSubjectSummary } from './components/subjects/CapsuleSubjectSummary';
+import { processCapsuleTagDetailsSections } from './components/tags/CapsuleTagsDetailsIntegration';
+import { addCapsuleTagsTableColumn } from './components/tags/CapsuleTagsTable';
+import { CapsuleTagSummary } from './components/tags/CapsuleTagSummary';
 import { TenantOwnerDetail } from './components/tenant-owners/TenantOwnerDetail';
 import { TenantOwnersList } from './components/tenant-owners/TenantOwnerList';
 import CreateGlobalTenantResourceForm from './components/tenant-resources/CreateGlobalTenantResourceForm';
@@ -72,6 +88,11 @@ import {
 import { CustomQuota, GlobalCustomQuota } from './resources/customQuotas';
 import { GlobalProxySettings } from './resources/globalProxySettings';
 import { GlobalResourceQuota } from './resources/globalResourceQuotas';
+import {
+  GlobalResourcePermitTemplate,
+  ResourcePermit,
+  ResourcePermitTemplate,
+} from './resources/resourcePermits';
 import { ResourcePool, ResourcePoolClaim } from './resources/resourcePools';
 import { TenantOwner } from './resources/tenantOwners';
 import { GlobalTenantResource, TenantResource } from './resources/tenantResources';
@@ -80,6 +101,7 @@ import { Tenants } from './resources/tenants';
 const TENANTS_MENU_ICON = 'mdi:account-group';
 
 registerAppBarAction(<TenantBox />);
+registerAppBarAction({ id: 'capsule-event-hub', action: <CapsuleEventHub /> });
 registerUIPanel({
   id: 'capsule-tenant-contexts',
   side: 'top',
@@ -87,6 +109,7 @@ registerUIPanel({
 });
 registerPluginSettings('capsule', CapsuleSettings, true);
 registerResourceTableColumnsProcessor(prewarmCapsuleTableEditAuthorization);
+registerResourceTableColumnsProcessor(addCapsuleTagsTableColumn);
 
 // Make the plugin's rich detail pages canonical for Capsule CR instances opened
 // from Headlamp's Custom Resources lists, search results, or direct URLs. These
@@ -98,6 +121,16 @@ const capsuleCustomResourceDetails: Array<{
   sidebar: string;
 }> = [
   {
+    crd: CAPSULE_CRDS.ResourcePermit,
+    kind: 'ResourcePermit',
+    sidebar: 'resource-permits',
+  },
+  {
+    crd: CAPSULE_CRDS.ResourcePermitTemplate,
+    kind: 'ResourcePermitTemplate',
+    sidebar: 'resource-permit-templates',
+  },
+  {
     crd: CAPSULE_CRDS.CapsuleConfiguration,
     kind: 'CapsuleConfiguration',
     sidebar: 'capsule-configurations',
@@ -105,6 +138,11 @@ const capsuleCustomResourceDetails: Array<{
   { crd: CAPSULE_CRDS.Tenant, kind: 'Tenant', sidebar: 'tenants' },
   { crd: CAPSULE_CRDS.TenantOwner, kind: 'TenantOwner', sidebar: 'tenant-owners' },
   { crd: CAPSULE_CRDS.CustomQuota, kind: 'CustomQuota', sidebar: 'custom-quotas' },
+  {
+    crd: CAPSULE_CRDS.GlobalResourcePermitTemplate,
+    kind: 'GlobalResourcePermitTemplate',
+    sidebar: 'resource-permit-templates',
+  },
   {
     crd: CAPSULE_CRDS.GlobalCustomQuota,
     kind: 'GlobalCustomQuota',
@@ -173,7 +211,7 @@ registerRoute({
 registerSidebarEntry({
   parent: '',
   name: 'capsule',
-  label: 'Capsule',
+  label: 'Tenants',
   icon: TENANTS_MENU_ICON,
   url: '/capsule/overview/',
 });
@@ -276,6 +314,30 @@ registerSidebarEntry({
 
 registerSidebarEntry({
   parent: 'capsule',
+  name: 'capsule-permits-section',
+  label: 'Permits',
+  icon: 'mdi:shield-key-outline',
+  url: capsuleCustomResourceListPath(CAPSULE_CRDS.ResourcePermit),
+});
+
+registerSidebarEntry({
+  parent: 'capsule-permits-section',
+  name: 'resource-permits',
+  label: 'Requests',
+  icon: 'mdi:clipboard-text-clock-outline',
+  url: capsuleCustomResourceListPath(CAPSULE_CRDS.ResourcePermit),
+});
+
+registerSidebarEntry({
+  parent: 'capsule-permits-section',
+  name: 'resource-permit-templates',
+  label: 'Templates',
+  icon: 'mdi:file-key-outline',
+  url: capsuleCustomResourceListPath(CAPSULE_CRDS.ResourcePermitTemplate),
+});
+
+registerSidebarEntry({
+  parent: 'capsule',
   name: 'capsule-proxy-section',
   label: 'Proxy',
   icon: 'mdi:server-network',
@@ -311,6 +373,22 @@ registerRoute({
   sidebar: 'overview',
   name: 'capsule-overview',
   component: () => <CapsuleOverview />,
+  exact: true,
+});
+
+registerRoute({
+  path: '/capsule/subjects/:kind/:subject',
+  sidebar: 'resource-permits',
+  name: 'capsule-subject',
+  component: () => <CapsuleSubjectSummary />,
+  exact: true,
+});
+
+registerRoute({
+  path: '/capsule/tags/:tag',
+  sidebar: 'overview',
+  name: 'capsule-tag',
+  component: () => <CapsuleTagSummary />,
   exact: true,
 });
 
@@ -461,6 +539,54 @@ registerRoute({
 });
 
 registerRoute({
+  path: '/capsule/resource-permits/',
+  sidebar: 'resource-permits',
+  name: 'resourcepermits',
+  component: () => <ResourcePermitsList />,
+  exact: true,
+});
+
+registerRoute({
+  path: '/capsule/resource-permits/:namespace/:name',
+  sidebar: 'resource-permits',
+  name: 'resourcepermit',
+  component: () => <ResourcePermitDetail />,
+  exact: true,
+});
+
+registerRoute({
+  path: '/capsule/resource-permit-templates/',
+  sidebar: 'resource-permit-templates',
+  name: 'resourcepermittemplates',
+  component: () => <ResourcePermitTemplatesList />,
+  exact: true,
+});
+
+registerRoute({
+  path: '/capsule/resource-permit-templates/:namespace/:name',
+  sidebar: 'resource-permit-templates',
+  name: 'resourcepermittemplate',
+  component: () => <ResourcePermitTemplateDetail />,
+  exact: true,
+});
+
+registerRoute({
+  path: '/capsule/global-resource-permit-templates/',
+  sidebar: 'resource-permit-templates',
+  name: 'globalresourcepermittemplates',
+  component: () => <GlobalResourcePermitTemplatesList />,
+  exact: true,
+});
+
+registerRoute({
+  path: '/capsule/global-resource-permit-templates/:name',
+  sidebar: 'resource-permit-templates',
+  name: 'globalresourcepermittemplate',
+  component: () => <GlobalResourcePermitTemplateDetail />,
+  exact: true,
+});
+
+registerRoute({
   path: '/capsule/global-proxy-settings/:name',
   sidebar: 'global-proxy-settings',
   name: 'globalproxysetting',
@@ -486,6 +612,9 @@ registerRoute({
 
 registerDetailsViewHeaderAction(NamespaceCordonAction);
 registerDetailsViewHeaderAction(ServiceAccountPromotionAction);
+registerDetailsViewHeaderAction(ResourcePermitReviewAction);
+registerDetailsViewHeaderAction(ResourcePermitRetryAction);
+registerDetailsViewHeaderAction(ResourcePermitExpireAction);
 
 registerDetailsViewHeaderActionsProcessor({
   id: 'capsule.documentation-action',
@@ -506,6 +635,11 @@ registerDetailsViewSectionsProcessor({
   processor: processPersistentVolumeDetailsSections,
 });
 
+registerDetailsViewSectionsProcessor({
+  id: 'capsule.resource-tags',
+  processor: processCapsuleTagDetailsSections,
+});
+
 registerDetailsViewHeaderAction(TenantCordonAction);
 registerDetailsViewHeaderAction(TenantResourceCordonAction);
 registerDetailsViewHeaderAction(TenantResourceReconcileAction);
@@ -516,6 +650,12 @@ registerDetailsViewHeaderAction(GlobalTenantResourceReconcileAction);
   class: Tenants,
   form: CreateTenantForm,
 };
+(RESOURCE_DEFINITIONS as any).ResourcePermit = {
+  class: ResourcePermit,
+};
+(RESOURCE_DEFINITIONS as any).ResourcePermitTemplate = {
+  class: ResourcePermitTemplate,
+};
 (RESOURCE_DEFINITIONS as any).CapsuleConfiguration = {
   class: CapsuleConfiguration,
 };
@@ -525,6 +665,9 @@ registerDetailsViewHeaderAction(GlobalTenantResourceReconcileAction);
 (RESOURCE_DEFINITIONS as any).GlobalCustomQuota = {
   class: GlobalCustomQuota,
   form: CreateGlobalCustomQuotaForm,
+};
+(RESOURCE_DEFINITIONS as any).GlobalResourcePermitTemplate = {
+  class: GlobalResourcePermitTemplate,
 };
 (RESOURCE_DEFINITIONS as any).CustomQuota = {
   class: CustomQuota,

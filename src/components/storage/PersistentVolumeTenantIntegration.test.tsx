@@ -6,6 +6,11 @@ import {
 } from './PersistentVolumeTenantIntegration';
 
 vi.mock('@kinvolk/headlamp-plugin/lib', () => ({
+  ConfigStore: class {
+    useConfig() {
+      return () => undefined;
+    }
+  },
   K8s: {
     ResourceClasses: {
       PersistentVolumeClaim: { useGet: () => [null] },
