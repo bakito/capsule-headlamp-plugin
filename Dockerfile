@@ -1,4 +1,4 @@
-FROM busybox:1.37.0
+FROM busybox:1.38.0
 
 RUN ["/bin/mkdir", "-p", "/plugins/capsule"]
 
